@@ -5,7 +5,7 @@ from lnbits.core.services import websocket_updater
 from lnbits.helpers import get_current_extension_name
 from lnbits.tasks import register_invoice_listener
 
-from .crud import get_myextension, update_myextension
+from .crud import get_lnurluniversal, update_lnurluniversal
 
 #######################################
 ########## RUN YOUR TASKS HERE ########
@@ -26,32 +26,32 @@ async def wait_for_paid_invoices():
 
 
 async def on_invoice_paid(payment: Payment) -> None:
-    if payment.extra.get("tag") != "MyExtension":
+    if payment.extra.get("tag") != "LnurlUniversal":
         return
 
-    myextension_id = payment.extra.get("myextensionId")
-    assert myextension_id, "myextensionId not set in invoice"
-    myextension = await get_myextension(myextension_id)
-    assert myextension, "MyExtension does not exist"
+    lnurluniversal_id = payment.extra.get("lnurluniversalId")
+    assert lnurluniversal_id, "lnurluniversalId not set in invoice"
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    assert lnurluniversal, "LnurlUniversal does not exist"
 
     # update something in the db
     if payment.extra.get("lnurlwithdraw"):
-        total = myextension.total - payment.amount
+        total = lnurluniversal.total - payment.amount
     else:
-        total = myextension.total + payment.amount
+        total = lnurluniversal.total + payment.amount
 
-    myextension.total = total
-    await update_myextension(myextension)
+    lnurluniversal.total = total
+    await update_lnurluniversal(lnurluniversal)
 
     # here we could send some data to a websocket on
-    # wss://<your-lnbits>/api/v1/ws/<myextension_id> and then listen to it on
+    # wss://<your-lnbits>/api/v1/ws/<lnurluniversal_id> and then listen to it on
     # the frontend, which we do with index.html connectWebocket()
 
     some_payment_data = {
-        "name": myextension.name,
+        "name": lnurluniversal.name,
         "amount": payment.amount,
         "fee": payment.fee,
         "checking_id": payment.checking_id,
     }
 
-    await websocket_updater(myextension_id, str(some_payment_data))
+    await websocket_updater(lnurluniversal_id, str(some_payment_data))

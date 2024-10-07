@@ -9,7 +9,7 @@
     <q-card>
       <q-card-section>
         <q-btn unelevated color="primary" @click="formDialog.show = true"
-          >New MyExtension</q-btn
+          >New LnurlUniversal</q-btn
         >
       </q-card-section>
     </q-card>
@@ -18,7 +18,7 @@
       <q-card-section>
         <div class="row items-center no-wrap q-mb-md">
           <div class="col">
-            <h5 class="text-subtitle1 q-my-none">MyExtension</h5>
+            <h5 class="text-subtitle1 q-my-none">LnurlUniversal</h5>
           </div>
           <div class="col-auto">
             <q-btn flat color="grey" @click="exportCSV">Export to CSV</q-btn>
@@ -32,13 +32,13 @@
           :columns="myexTable.columns"
           :pagination.sync="myexTable.pagination"
         >
-          <myextension v-slot:header="props">
+          <lnurluniversal v-slot:header="props">
             <q-tr :props="props">
               <q-th v-for="col in props.cols" :key="col.name" :props="props">
                 ${ col.label }
               </q-th>
             </q-tr>
-          </myextension>
+          </lnurluniversal>
 
           <template v-slot:body="props">
             <q-tr :props="props">
@@ -65,7 +65,7 @@
                   icon="launch"
                   :color="($q.dark.isActive) ? 'grey-7' : 'grey-5'"
                   type="a"
-                  :href="props.row.myextension"
+                  :href="props.row.lnurluniversal"
                   target="_blank"
                   ><q-tooltip>Open public page</q-tooltip></q-btn
                 ></q-td
@@ -76,7 +76,7 @@
                   flat
                   dense
                   size="xs"
-                  @click="updateMyExtensionForm(props.row.id)"
+                  @click="updateLnurlUniversalForm(props.row.id)"
                   icon="edit"
                   color="light-blue"
                 >
@@ -89,7 +89,7 @@
                   flat
                   dense
                   size="xs"
-                  @click="deleteMyExtension(props.row.id)"
+                  @click="deleteLnurlUniversal(props.row.id)"
                   icon="cancel"
                   color="pink"
                 >
@@ -107,7 +107,7 @@
     <q-card>
       <q-card-section>
         <h6 class="text-subtitle1 q-my-none">
-          {{SITE_TITLE}} MyExtension extension
+          {{SITE_TITLE}} LnurlUniversal extension
         </h6>
         <p>
           Simple extension you can use as a base for your own extension. <br />
@@ -117,9 +117,9 @@
       <q-card-section class="q-pa-none">
         <q-separator></q-separator>
         <q-list>
-          {% include "myextension/_api_docs.html" %}
+          {% include "lnurluniversal/_api_docs.html" %}
           <q-separator></q-separator>
-          {% include "myextension/_myextension.html" %}
+          {% include "lnurluniversal/_lnurluniversal.html" %}
         </q-list>
       </q-card-section>
     </q-card>
@@ -131,7 +131,7 @@
 
   <q-dialog v-model="formDialog.show" position="top" @hide="closeFormDialog">
     <q-card class="q-pa-lg q-pt-xl" style="width: 500px">
-      <q-form @submit="sendMyExtensionData" class="q-gutter-md">
+      <q-form @submit="sendLnurlUniversalData" class="q-gutter-md">
         <q-input
           filled
           dense
@@ -167,7 +167,7 @@
             unelevated
             color="primary"
             type="submit"
-            >Update MyExtension</q-btn
+            >Update LnurlUniversal</q-btn
           >
           <q-btn
             v-else
@@ -175,7 +175,7 @@
             color="primary"
             :disable="formDialog.data.name == null || formDialog.data.wallet == null || formDialog.data.lnurlwithdrawamount == null || formDialog.data.lnurlpayamount == null"
             type="submit"
-            >Create MyExtension</q-btn
+            >Create LnurlUniversal</q-btn
           >
           <q-btn v-close-popup flat color="grey" class="q-ml-auto"
             >Cancel</q-btn
@@ -242,12 +242,12 @@
   ///////////////////////////////////////////////////
   //////////an object we can update with data////////
   ///////////////////////////////////////////////////
-  const mapMyExtension = obj => {
+  const mapLnurlUniversal = obj => {
     obj.date = Quasar.utils.date.formatDate(
       new Date(obj.time * 1000),
       'YYYY-MM-DD HH:mm'
     )
-    obj.myextension = ['/myextension/', obj.id].join('')
+    obj.lnurluniversal = ['/lnurluniversal/', obj.id].join('')
     return obj
   }
   new Vue({
@@ -301,22 +301,22 @@
         this.formDialog.show = false
         this.formDialog.data = {}
       },
-      getMyExtensions: function () {
+      getLnurlUniversals: function () {
         var self = this
 
         LNbits.api
           .request(
             'GET',
-            '/myextension/api/v1/myex?all_wallets=true',
+            '/lnurluniversal/api/v1/myex?all_wallets=true',
             this.g.user.wallets[0].inkey
           )
           .then(function (response) {
             self.myex = response.data.map(function (obj) {
-              return mapMyExtension(obj)
+              return mapLnurlUniversal(obj)
             })
           })
       },
-      sendMyExtensionData() {
+      sendLnurlUniversalData() {
         const data = {
           name: this.formDialog.data.name,
           lnurlwithdrawamount: this.formDialog.data.lnurlwithdrawamount,
@@ -329,15 +329,15 @@
           data.id = this.formDialog.data.id
           data.wallet = wallet.id
           data.total = this.formDialog.data.total
-          this.updateMyExtension(wallet, data)
+          this.updateLnurlUniversal(wallet, data)
         } else {
-          this.createMyExtension(wallet, data)
+          this.createLnurlUniversal(wallet, data)
         }
       },
-      updateMyExtensionForm(tempId) {
-        const myextension = _.findWhere(this.myex, {id: tempId})
+      updateLnurlUniversalForm(tempId) {
+        const lnurluniversal = _.findWhere(this.myex, {id: tempId})
         this.formDialog.data = {
-          ...myextension
+          ...lnurluniversal
         }
         if (this.formDialog.data.tip_wallet != '') {
           this.formDialog.advanced.tips = true
@@ -347,22 +347,22 @@
         }
         this.formDialog.show = true
       },
-      createMyExtension(wallet, data) {
+      createLnurlUniversal(wallet, data) {
         LNbits.api
-          .request('POST', '/myextension/api/v1/myex', wallet.adminkey, data)
+          .request('POST', '/lnurluniversal/api/v1/myex', wallet.adminkey, data)
           .then(response => {
-            this.myex.push(mapMyExtension(response.data))
+            this.myex.push(mapLnurlUniversal(response.data))
             this.closeFormDialog()
           })
           .catch(error => {
             LNbits.utils.notifyApiError(error)
           })
       },
-      updateMyExtension(wallet, data) {
+      updateLnurlUniversal(wallet, data) {
         LNbits.api
           .request(
             'PUT',
-            `/myextension/api/v1/myex/${data.id}`,
+            `/lnurluniversal/api/v1/myex/${data.id}`,
             wallet.adminkey,
             data
           )
@@ -370,25 +370,25 @@
             this.myex = _.reject(this.myex, obj => {
               return obj.id == data.id
             })
-            this.myex.push(mapMyExtension(response.data))
+            this.myex.push(mapLnurlUniversal(response.data))
             this.closeFormDialog()
           })
           .catch(error => {
             LNbits.utils.notifyApiError(error)
           })
       },
-      deleteMyExtension: function (tempId) {
+      deleteLnurlUniversal: function (tempId) {
         var self = this
-        var myextension = _.findWhere(this.myex, {id: tempId})
+        var lnurluniversal = _.findWhere(this.myex, {id: tempId})
 
         LNbits.utils
-          .confirmDialog('Are you sure you want to delete this MyExtension?')
+          .confirmDialog('Are you sure you want to delete this LnurlUniversal?')
           .onOk(function () {
             LNbits.api
               .request(
                 'DELETE',
-                '/myextension/api/v1/myex/' + tempId,
-                _.findWhere(self.g.user.wallets, {id: myextension.wallet})
+                '/lnurluniversal/api/v1/myex/' + tempId,
+                _.findWhere(self.g.user.wallets, {id: lnurluniversal.wallet})
                   .adminkey
               )
               .then(function (response) {
@@ -405,22 +405,22 @@
         LNbits.utils.exportCSV(this.myexTable.columns, this.myex)
       },
       itemsArray(tempId) {
-        const myextension = _.findWhere(this.myex, {id: tempId})
-        return [...myextension.itemsMap.values()]
+        const lnurluniversal = _.findWhere(this.myex, {id: tempId})
+        return [...lnurluniversal.itemsMap.values()]
       },
       openformDialog(id) {
         const [tempId, itemId] = id.split(':')
-        const myextension = _.findWhere(this.myex, {id: tempId})
+        const lnurluniversal = _.findWhere(this.myex, {id: tempId})
         if (itemId) {
-          const item = myextension.itemsMap.get(id)
+          const item = lnurluniversal.itemsMap.get(id)
           this.formDialog.data = {
             ...item,
-            myextension: tempId
+            lnurluniversal: tempId
           }
         } else {
-          this.formDialog.data.myextension = tempId
+          this.formDialog.data.lnurluniversal = tempId
         }
-        this.formDialog.data.currency = myextension.currency
+        this.formDialog.data.currency = lnurluniversal.currency
         this.formDialog.show = true
       },
       closeformDialog() {
@@ -434,7 +434,7 @@
         this.connectWebocket(this.urlDialog.data.id)
         this.urlDialog.show = true
       },
-      createInvoice(walletId, myextensionId) {
+      createInvoice(walletId, lnurluniversalId) {
         ///////////////////////////////////////////////////
         ///Simple call to the api to create an invoice/////
         ///////////////////////////////////////////////////
@@ -445,10 +445,10 @@
         const dataToSend = {
           out: false,
           amount: this.invoiceAmount,
-          memo: 'Invoice created by MyExtension',
+          memo: 'Invoice created by LnurlUniversal',
           extra: {
-            tag: 'MyExtension',
-            myextensionId: myextensionId
+            tag: 'LnurlUniversal',
+            lnurluniversalId: lnurluniversalId
           }
         }
         LNbits.api
@@ -523,7 +523,7 @@
     ///////////////////////////////////////////////////
     created: function () {
       if (this.g.user.wallets.length) {
-        this.getMyExtensions()
+        this.getLnurlUniversals()
       }
     }
   })

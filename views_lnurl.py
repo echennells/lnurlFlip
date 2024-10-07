@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query, Request
 from lnbits.core.services import create_invoice, pay_invoice
 from loguru import logger
 
-from .crud import get_myextension
+from .crud import get_lnurluniversal
 
 #################################################
 ########### A very simple LNURLpay ##############
@@ -18,64 +18,64 @@ from .crud import get_myextension
 #################################################
 #################################################
 
-myextension_lnurl_router = APIRouter()
+lnurluniversal_lnurl_router = APIRouter()
 
 
-@myextension_lnurl_router.get(
-    "/api/v1/lnurl/pay/{myextension_id}",
+@lnurluniversal_lnurl_router.get(
+    "/api/v1/lnurl/pay/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
-    name="myextension.api_lnurl_pay",
+    name="lnurluniversal.api_lnurl_pay",
 )
 async def api_lnurl_pay(
     request: Request,
-    myextension_id: str,
+    lnurluniversal_id: str,
 ):
-    myextension = await get_myextension(myextension_id)
-    if not myextension:
-        return {"status": "ERROR", "reason": "No myextension found"}
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        return {"status": "ERROR", "reason": "No lnurluniversal found"}
     return {
         "callback": str(
             request.url_for(
-                "myextension.api_lnurl_pay_callback", myextension_id=myextension_id
+                "lnurluniversal.api_lnurl_pay_callback", lnurluniversal_id=lnurluniversal_id
             )
         ),
-        "maxSendable": myextension.lnurlpayamount * 1000,
-        "minSendable": myextension.lnurlpayamount * 1000,
-        "metadata": '[["text/plain", "' + myextension.name + '"]]',
+        "maxSendable": lnurluniversal.lnurlpayamount * 1000,
+        "minSendable": lnurluniversal.lnurlpayamount * 1000,
+        "metadata": '[["text/plain", "' + lnurluniversal.name + '"]]',
         "tag": "payRequest",
     }
 
 
-@myextension_lnurl_router.get(
-    "/api/v1/lnurl/paycb/{myextension_id}",
+@lnurluniversal_lnurl_router.get(
+    "/api/v1/lnurl/paycb/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
-    name="myextension.api_lnurl_pay_callback",
+    name="lnurluniversal.api_lnurl_pay_callback",
 )
 async def api_lnurl_pay_cb(
     request: Request,
-    myextension_id: str,
+    lnurluniversal_id: str,
     amount: int = Query(...),
 ):
-    myextension = await get_myextension(myextension_id)
-    logger.debug(myextension)
-    if not myextension:
-        return {"status": "ERROR", "reason": "No myextension found"}
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    logger.debug(lnurluniversal)
+    if not lnurluniversal:
+        return {"status": "ERROR", "reason": "No lnurluniversal found"}
 
     _, payment_request = await create_invoice(
-        wallet_id=myextension.wallet,
+        wallet_id=lnurluniversal.wallet,
         amount=int(amount / 1000),
-        memo=myextension.name,
-        unhashed_description=f'[["text/plain", "{myextension.name}"]]'.encode(),
+        memo=lnurluniversal.name,
+        unhashed_description=f'[["text/plain", "{lnurluniversal.name}"]]'.encode(),
         extra={
-            "tag": "MyExtension",
-            "myextensionId": myextension_id,
+            "tag": "LnurlUniversal",
+            "lnurluniversalId": lnurluniversal_id,
             "extra": request.query_params.get("amount"),
         },
     )
     return {
         "pr": payment_request,
         "routes": [],
-        "successAction": {"tag": "message", "message": f"Paid {myextension.name}"},
+        "successAction": {"tag": "message", "message": f"Paid {lnurluniversal.name}"},
     }
 
 
@@ -88,60 +88,60 @@ async def api_lnurl_pay_cb(
 #################################################
 
 
-@myextension_lnurl_router.get(
-    "/api/v1/lnurl/withdraw/{myextension_id}",
+@lnurluniversal_lnurl_router.get(
+    "/api/v1/lnurl/withdraw/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
-    name="myextension.api_lnurl_withdraw",
+    name="lnurluniversal.api_lnurl_withdraw",
 )
 async def api_lnurl_withdraw(
     request: Request,
-    myextension_id: str,
+    lnurluniversal_id: str,
 ):
-    myextension = await get_myextension(myextension_id)
-    if not myextension:
-        return {"status": "ERROR", "reason": "No myextension found"}
-    k1 = shortuuid.uuid(name=myextension.id)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        return {"status": "ERROR", "reason": "No lnurluniversal found"}
+    k1 = shortuuid.uuid(name=lnurluniversal.id)
     return {
         "tag": "withdrawRequest",
         "callback": str(
             request.url_for(
-                "myextension.api_lnurl_withdraw_callback", myextension_id=myextension_id
+                "lnurluniversal.api_lnurl_withdraw_callback", lnurluniversal_id=lnurluniversal_id
             )
         ),
         "k1": k1,
-        "defaultDescription": myextension.name,
-        "maxWithdrawable": myextension.lnurlwithdrawamount * 1000,
-        "minWithdrawable": myextension.lnurlwithdrawamount * 1000,
+        "defaultDescription": lnurluniversal.name,
+        "maxWithdrawable": lnurluniversal.lnurlwithdrawamount * 1000,
+        "minWithdrawable": lnurluniversal.lnurlwithdrawamount * 1000,
     }
 
 
-@myextension_lnurl_router.get(
-    "/api/v1/lnurl/withdrawcb/{myextension_id}",
+@lnurluniversal_lnurl_router.get(
+    "/api/v1/lnurl/withdrawcb/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
-    name="myextension.api_lnurl_withdraw_callback",
+    name="lnurluniversal.api_lnurl_withdraw_callback",
 )
 async def api_lnurl_withdraw_cb(
-    myextension_id: str,
+    lnurluniversal_id: str,
     pr: Optional[str] = None,
     k1: Optional[str] = None,
 ):
     assert k1, "k1 is required"
     assert pr, "pr is required"
-    myextension = await get_myextension(myextension_id)
-    if not myextension:
-        return {"status": "ERROR", "reason": "No myextension found"}
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        return {"status": "ERROR", "reason": "No lnurluniversal found"}
 
-    k1_check = shortuuid.uuid(name=myextension.id)
+    k1_check = shortuuid.uuid(name=lnurluniversal.id)
     if k1_check != k1:
         return {"status": "ERROR", "reason": "Wrong k1 check provided"}
 
     await pay_invoice(
-        wallet_id=myextension.wallet,
+        wallet_id=lnurluniversal.wallet,
         payment_request=pr,
-        max_sat=int(myextension.lnurlwithdrawamount * 1000),
+        max_sat=int(lnurluniversal.lnurlwithdrawamount * 1000),
         extra={
-            "tag": "MyExtension",
-            "myextensionId": myextension_id,
+            "tag": "LnurlUniversal",
+            "lnurluniversalId": lnurluniversal_id,
             "lnurlwithdraw": True,
         },
     )

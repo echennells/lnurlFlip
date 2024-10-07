@@ -3,13 +3,13 @@ from typing import Optional, Union
 from lnbits.db import Database
 from lnbits.helpers import insert_query, update_query
 
-from .models import MyExtension
+from .models import LnurlUniversal
 
-db = Database("ext_myextension")
-table_name = "myextension.maintable"
+db = Database("ext_lnurluniversal")
+table_name = "lnurluniversal.maintable"
 
 
-async def create_myextension(data: MyExtension) -> MyExtension:
+async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     await db.execute(
         insert_query(table_name, data),
         (*data.dict().values(),),
@@ -18,33 +18,33 @@ async def create_myextension(data: MyExtension) -> MyExtension:
 
     # this is how we used to do it
 
-    # myextension_id = urlsafe_short_hash()
+    # lnurluniversal_id = urlsafe_short_hash()
     # await db.execute(
     #     """
-    #     INSERT INTO myextension.maintable
+    #     INSERT INTO lnurluniversal.maintable
     #     (id, wallet, name, lnurlpayamount, lnurlwithdrawamount)
     #     VALUES (?, ?, ?, ?, ?)
     #     """,
     #     (
-    #         myextension_id,
+    #         lnurluniversal_id,
     #         wallet_id,
     #         data.name,
     #         data.lnurlpayamount,
     #         data.lnurlwithdrawamount,
     #     ),
     # )
-    # myextension = await get_myextension(myextension_id)
-    # assert myextension, "Newly created table couldn't be retrieved"
+    # lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    # assert lnurluniversal, "Newly created table couldn't be retrieved"
 
 
-async def get_myextension(myextension_id: str) -> Optional[MyExtension]:
+async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
     row = await db.fetchone(
-        f"SELECT * FROM {table_name} WHERE id = ?", (myextension_id,)
+        f"SELECT * FROM {table_name} WHERE id = ?", (lnurluniversal_id,)
     )
-    return MyExtension(**row) if row else None
+    return LnurlUniversal(**row) if row else None
 
 
-async def get_myextensions(wallet_ids: Union[str, list[str]]) -> list[MyExtension]:
+async def get_lnurluniversals(wallet_ids: Union[str, list[str]]) -> list[LnurlUniversal]:
     if isinstance(wallet_ids, str):
         wallet_ids = [wallet_ids]
 
@@ -52,10 +52,10 @@ async def get_myextensions(wallet_ids: Union[str, list[str]]) -> list[MyExtensio
     rows = await db.fetchall(
         f"SELECT * FROM {table_name} WHERE wallet IN ({q})", (*wallet_ids,)
     )
-    return [MyExtension(**row) for row in rows]
+    return [LnurlUniversal(**row) for row in rows]
 
 
-async def update_myextension(data: MyExtension) -> MyExtension:
+async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     await db.execute(
         update_query(table_name, data),
         (
@@ -68,10 +68,10 @@ async def update_myextension(data: MyExtension) -> MyExtension:
 
     # q = ", ".join([f"{field[0]} = ?" for field in kwargs.items()])
     # await db.execute(
-    #     f"UPDATE myextension.maintable SET {q} WHERE id = ?",
-    #     (*kwargs.values(), myextension_id),
+    #     f"UPDATE lnurluniversal.maintable SET {q} WHERE id = ?",
+    #     (*kwargs.values(), lnurluniversal_id),
     # )
 
 
-async def delete_myextension(myextension_id: str) -> None:
-    await db.execute(f"DELETE FROM {table_name} WHERE id = ?", (myextension_id,))
+async def delete_lnurluniversal(lnurluniversal_id: str) -> None:
+    await db.execute(f"DELETE FROM {table_name} WHERE id = ?", (lnurluniversal_id,))

@@ -1,9 +1,9 @@
 {
   "repos": [
     {
-      "id": "myextension",
-      "organisation": "lnbits",
-      "repository": "myextension"
+      "id": "lnurluniversal",
+      "organisation": "echennells",
+      "repository": "lnurl-universal"
     }
   ]
 }

@@ -14,15 +14,15 @@ from lnurl import encode as lnurl_encode
 from starlette.exceptions import HTTPException
 
 from .crud import (
-    create_myextension,
-    delete_myextension,
-    get_myextension,
-    get_myextensions,
-    update_myextension,
+    create_lnurluniversal,
+    delete_lnurluniversal,
+    get_lnurluniversal,
+    get_lnurluniversals,
+    update_lnurluniversal,
 )
-from .models import CreateMyExtensionData, MyExtension
+from .models import CreateLnurlUniversalData, LnurlUniversal
 
-myextension_api_router = APIRouter()
+lnurluniversal_api_router = APIRouter()
 
 
 #######################################
@@ -32,8 +32,8 @@ myextension_api_router = APIRouter()
 ## Get all the records belonging to the user
 
 
-@myextension_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
-async def api_myextensions(
+@lnurluniversal_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
+async def api_lnurluniversals(
     all_wallets: bool = Query(False),
     wallet: WalletTypeInfo = Depends(get_key_type),
 ):
@@ -41,103 +41,103 @@ async def api_myextensions(
     if all_wallets:
         user = await get_user(wallet.wallet.user)
         wallet_ids = user.wallet_ids if user else []
-    return [myextension.dict() for myextension in await get_myextensions(wallet_ids)]
+    return [lnurluniversal.dict() for lnurluniversal in await get_lnurluniversals(wallet_ids)]
 
 
 ## Get a single record
 
 
-@myextension_api_router.get(
-    "/api/v1/myex/{myextension_id}",
+@lnurluniversal_api_router.get(
+    "/api/v1/myex/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
     dependencies=[Depends(require_invoice_key)],
 )
-async def api_myextension(myextension_id: str):
-    myextension = await get_myextension(myextension_id)
-    if not myextension:
+async def api_lnurluniversal(lnurluniversal_id: str):
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="MyExtension does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
         )
-    return myextension.dict()
+    return lnurluniversal.dict()
 
 
 ## update a record
 
 
-@myextension_api_router.put("/api/v1/myex/{myextension_id}")
-async def api_myextension_update(
-    data: CreateMyExtensionData,
-    myextension_id: str,
+@lnurluniversal_api_router.put("/api/v1/myex/{lnurluniversal_id}")
+async def api_lnurluniversal_update(
+    data: CreateLnurlUniversalData,
+    lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(get_key_type),
-) -> MyExtension:
-    if not myextension_id:
+) -> LnurlUniversal:
+    if not lnurluniversal_id:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="MyExtension does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
         )
-    myextension = await get_myextension(myextension_id)
-    assert myextension, "MyExtension couldn't be retrieved"
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    assert lnurluniversal, "LnurlUniversal couldn't be retrieved"
 
-    if wallet.wallet.id != myextension.wallet:
+    if wallet.wallet.id != lnurluniversal.wallet:
         raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Not your MyExtension."
+            status_code=HTTPStatus.FORBIDDEN, detail="Not your LnurlUniversal."
         )
 
     for key, value in data.dict().items():
-        setattr(myextension, key, value)
+        setattr(lnurluniversal, key, value)
 
-    return await update_myextension(myextension)
+    return await update_lnurluniversal(lnurluniversal)
 
 
 ## Create a new record
 
 
-@myextension_api_router.post("/api/v1/myex", status_code=HTTPStatus.CREATED)
-async def api_myextension_create(
+@lnurluniversal_api_router.post("/api/v1/myex", status_code=HTTPStatus.CREATED)
+async def api_lnurluniversal_create(
     request: Request,
-    data: CreateMyExtensionData,
+    data: CreateLnurlUniversalData,
     key_type: WalletTypeInfo = Depends(require_admin_key),
-) -> MyExtension:
-    myextension_id = urlsafe_short_hash()
+) -> LnurlUniversal:
+    lnurluniversal_id = urlsafe_short_hash()
     lnurlpay = lnurl_encode(
-        str(request.url_for("myextension.api_lnurl_pay", myextension_id=myextension_id))
+        str(request.url_for("lnurluniversal.api_lnurl_pay", lnurluniversal_id=lnurluniversal_id))
     )
     lnurlwithdraw = lnurl_encode(
         str(
             request.url_for(
-                "myextension.api_lnurl_withdraw", myextension_id=myextension_id
+                "lnurluniversal.api_lnurl_withdraw", lnurluniversal_id=lnurluniversal_id
             )
         )
     )
     data.wallet = data.wallet or key_type.wallet.id
-    myext = MyExtension(
-        id=myextension_id,
+    myext = LnurlUniversal(
+        id=lnurluniversal_id,
         lnurlpay=lnurlpay,
         lnurlwithdraw=lnurlwithdraw,
         **data.dict(),
     )
-    return await create_myextension(myext)
+    return await create_lnurluniversal(myext)
 
 
 ## Delete a record
 
 
-@myextension_api_router.delete("/api/v1/myex/{myextension_id}")
-async def api_myextension_delete(
-    myextension_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+@lnurluniversal_api_router.delete("/api/v1/myex/{lnurluniversal_id}")
+async def api_lnurluniversal_delete(
+    lnurluniversal_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
-    myextension = await get_myextension(myextension_id)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
 
-    if not myextension:
+    if not lnurluniversal:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="MyExtension does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
         )
 
-    if myextension.wallet != wallet.wallet.id:
+    if lnurluniversal.wallet != wallet.wallet.id:
         raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Not your MyExtension."
+            status_code=HTTPStatus.FORBIDDEN, detail="Not your LnurlUniversal."
         )
 
-    await delete_myextension(myextension_id)
+    await delete_lnurluniversal(lnurluniversal_id)
     return "", HTTPStatus.NO_CONTENT
 
 
@@ -146,17 +146,17 @@ async def api_myextension_delete(
 ## This endpoint creates a payment
 
 
-@myextension_api_router.post(
-    "/api/v1/myex/payment/{myextension_id}", status_code=HTTPStatus.CREATED
+@lnurluniversal_api_router.post(
+    "/api/v1/myex/payment/{lnurluniversal_id}", status_code=HTTPStatus.CREATED
 )
-async def api_myextension_create_invoice(
-    myextension_id: str, amount: int = Query(..., ge=1), memo: str = ""
+async def api_lnurluniversal_create_invoice(
+    lnurluniversal_id: str, amount: int = Query(..., ge=1), memo: str = ""
 ) -> dict:
-    myextension = await get_myextension(myextension_id)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
 
-    if not myextension:
+    if not lnurluniversal:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="MyExtension does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
         )
 
     # we create a payment and add some tags,
@@ -164,11 +164,11 @@ async def api_myextension_create_invoice(
 
     try:
         payment_hash, payment_request = await create_invoice(
-            wallet_id=myextension.wallet,
+            wallet_id=lnurluniversal.wallet,
             amount=amount,
-            memo=f"{memo} to {myextension.name}" if memo else f"{myextension.name}",
+            memo=f"{memo} to {lnurluniversal.name}" if memo else f"{lnurluniversal.name}",
             extra={
-                "tag": "myextension",
+                "tag": "lnurluniversal",
                 "amount": amount,
             },
         )
