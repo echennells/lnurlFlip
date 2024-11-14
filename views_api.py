@@ -612,17 +612,12 @@ async def api_lnurluniversal_create_invoice(
 
 @lnurluniversal_api_router.get("/api/v1/comments/{universal_id}")
 async def api_get_comments(
-    universal_id: str,
-    wallet: WalletTypeInfo = Depends(get_key_type)
+    universal_id: str
 ) -> list[dict]:
     """Get comments for a universal"""
-    # First verify the universal belongs to this wallet
     universal = await get_lnurluniversal(universal_id)
     if not universal:
         raise HTTPException(status_code=404, detail="Universal not found")
-
-    if universal.wallet != wallet.wallet.id:
-        raise HTTPException(status_code=403, detail="Not your universal")
 
     comments = await get_universal_comments(universal_id)
     return comments
