@@ -11,30 +11,35 @@ db = Database("ext_lnurluniversal")
 table_name = "maintable"
 
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
-    data.total = 0  # Ensure total is initialized to 0
-    data.uses = 0   # Ensure uses is initialized to 0
-    data.state = "payment"  # Ensure initial state is set to payment
-    await db.execute(
-        """
-        INSERT INTO lnurluniversal.maintable
-        (id, name, wallet, lnurlwithdrawamount, selectedLnurlp, selectedLnurlw, state, total, uses)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            data.id,
-            data.name,
-            data.wallet,
-            data.lnurlwithdrawamount,
-            data.selectedLnurlp,
-            data.selectedLnurlw,
-            data.state,
-            data.total,
-            data.uses
-        ),
-    )
-    created = await get_lnurluniversal(data.id)
-    logging.info(f"Created LnurlUniversal: {created}")
-    return created
+    try:
+        data.total = 0  # Ensure total is initialized to 0
+        data.uses = 0   # Ensure uses is initialized to 0
+        data.state = "payment"  # Ensure initial state is set to payment
+        logger.info(f"Preparing to insert LnurlUniversal: {data}")
+        await db.execute(
+            """
+            INSERT INTO lnurluniversal.maintable
+            (id, name, wallet, lnurlwithdrawamount, selectedLnurlp, selectedLnurlw, state, total, uses)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                data.id,
+                data.name,
+                data.wallet,
+                data.lnurlwithdrawamount,
+                data.selectedLnurlp,
+                data.selectedLnurlw,
+                data.state,
+                data.total,
+                data.uses
+            ),
+        )
+        created = await get_lnurluniversal(data.id)
+        logger.info(f"Created LnurlUniversal: {created}")
+        return created
+    except Exception as e:
+        logger.error(f"Error creating LnurlUniversal in database: {str(e)}")
+        raise
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals"""
@@ -63,7 +68,13 @@ async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]
     row = await db.fetchone(
         f"SELECT * FROM {table_name} WHERE id = ?", (lnurluniversal_id,)
     )
-    return LnurlUniversal(**row) if row else None
+    if row:
+        lnurluniversal = LnurlUniversal(**row)
+        logger.info(f"Retrieved LnurlUniversal: {lnurluniversal}")
+        return lnurluniversal
+    else:
+        logger.warning(f"LnurlUniversal not found for id: {lnurluniversal_id}")
+        return None
 
 async def get_lnurluniversals(wallet_ids: Union[str, list[str]]) -> list[LnurlUniversal]:
     if isinstance(wallet_ids, str):

@@ -508,33 +508,36 @@ async def api_lnurluniversal_create(
     data: CreateLnurlUniversalData,
     key_type: WalletTypeInfo = Depends(require_admin_key),
 ) -> LnurlUniversal:
-    lnurluniversal_id = urlsafe_short_hash()
+    try:
+        lnurluniversal_id = urlsafe_short_hash()
+        logger.info(f"Generated lnurluniversal_id: {lnurluniversal_id}")
 
-    logging.info(f"Generated lnurluniversal_id: {lnurluniversal_id}")
+        data.wallet = data.wallet or key_type.wallet.id
+        myext = LnurlUniversal(
+            id=lnurluniversal_id,
+            name=data.name,
+            wallet=data.wallet,
+            lnurlwithdrawamount=data.lnurlwithdrawamount,
+            selectedLnurlp=data.selectedLnurlp,
+            selectedLnurlw=data.selectedLnurlw,
+            state="payment",  # Always initialize state to "payment"
+            total=0,  # Initialize total to 0
+            uses=0    # Initialize uses to 0
+        )
 
-    data.wallet = data.wallet or key_type.wallet.id
-    myext = LnurlUniversal(
-        id=lnurluniversal_id,
-        name=data.name,
-        wallet=data.wallet,
-        lnurlwithdrawamount=data.lnurlwithdrawamount,
-        selectedLnurlp=data.selectedLnurlp,
-        selectedLnurlw=data.selectedLnurlw,
-        state="payment",  # Always initialize state to "payment"
-        total=0,  # Initialize total to 0
-        uses=0    # Initialize uses to 0
-    )
+        logger.info(f"Creating LnurlUniversal with data: {myext}")
 
-    logging.info(f"Creating LnurlUniversal with data: {myext}")
-
-    created_lnurluniversal = await create_lnurluniversal(myext)
-    logging.info(f"Created LnurlUniversal: {created_lnurluniversal}")
-    
-    # Fetch the created LnurlUniversal to ensure all fields are populated
-    fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
-    logging.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
-    
-    return fetched_lnurluniversal
+        created_lnurluniversal = await create_lnurluniversal(myext)
+        logger.info(f"Created LnurlUniversal: {created_lnurluniversal}")
+        
+        # Fetch the created LnurlUniversal to ensure all fields are populated
+        fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
+        logger.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
+        
+        return fetched_lnurluniversal
+    except Exception as e:
+        logger.error(f"Error creating LnurlUniversal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating LnurlUniversal: {str(e)}")
 
 
 ## Delete a record
