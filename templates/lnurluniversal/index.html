@@ -87,10 +87,10 @@
             floating
             style="top: 0; right: -4px;"
           >
-            {{ props.row.comment_count }}
+            ${ props.row.comment_count }
           </q-badge>
           <q-tooltip>
-            {{ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }}
+            ${ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }
           </q-tooltip>
         </q-btn>
         <q-btn
