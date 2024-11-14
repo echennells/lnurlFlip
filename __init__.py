@@ -5,7 +5,6 @@ from .crud import db
 from .tasks import wait_for_paid_invoices
 from .views import lnurluniversal_generic_router
 from .views_api import lnurluniversal_api_router
-from .views_lnurl import lnurluniversal_lnurl_router
 from .migrations import (
     m001_initial,
     m002_update_schema,
@@ -34,7 +33,6 @@ migrations = [
 lnurluniversal_ext: APIRouter = APIRouter(prefix="/lnurluniversal", tags=["LnurlUniversal"])
 lnurluniversal_ext.include_router(lnurluniversal_generic_router)
 lnurluniversal_ext.include_router(lnurluniversal_api_router)
-lnurluniversal_ext.include_router(lnurluniversal_lnurl_router)
 
 lnurluniversal_static_files = [
     {
