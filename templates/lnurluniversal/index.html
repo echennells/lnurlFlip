@@ -689,7 +689,6 @@ displayLnurlPayLinks(links) {
   });
 },
       connectWebSocket(wallet_id) {
-    const self = this
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const localUrl = `${protocol}//${document.domain}${location.port ? ':' + location.port : ''}/api/v1/ws/${wallet_id}`
     this.connection = new WebSocket(localUrl)
@@ -701,16 +700,10 @@ displayLnurlPayLinks(links) {
                 const record = self.myex.find(r => r.id === data.universal_id)
                 if (record) {
                     record.balance = data.balance
-                    console.log(`Payment received for ${data.universal_id}. New balance: ${data.balance} sats`)
-                    if (data.comment) {
-                        console.log(`Comment received: "${data.comment}"`)
-                    }
                 }
-            } else if (data.withdrawal_id) {
-                console.log(`Withdrawal processed for ${data.withdrawal_id}. Amount: ${data.amount} sats`)
             }
         } catch (error) {
-            console.error("Error processing WebSocket message:", error)
+            // Silent error handling
         }
     }
 }

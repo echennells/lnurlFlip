@@ -282,23 +282,16 @@ async def api_lnurl_callback(
     amount: int = Query(...),
     comment: Optional[str] = Query(None)
 ):
-    logger.info(f"Callback received with amount: {amount} for id: {lnurluniversal_id}")
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     if not lnurluniversal:
-        logger.error("Universal not found")
         raise HTTPException(status_code=404, detail="Record not found")
-
-    logger.info(f"Universal state: {lnurluniversal.state}")
-    logger.info(f"Current total: {lnurluniversal.total}")
 
     pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
     if not pay_link:
         raise HTTPException(status_code=404, detail="Payment link not found")
 
     if comment:
-        logger.info(f"Comment received: {comment}")
-        
-        # Store the comment in the database
+        logger.info(f"Payment received for {lnurluniversal_id}. Amount: {amount/1000} sats. Comment: {comment}")
         comment_id = urlsafe_short_hash()
         await db.execute(
             """
@@ -314,12 +307,13 @@ async def api_lnurl_callback(
                 amount
             )
         )
+    else:
+        logger.info(f"Payment received for {lnurluniversal_id}. Amount: {amount/1000} sats.")
 
-    # Create invoice with tracking data
     payment_hash, payment_request = await create_invoice(
         wallet_id=pay_link.wallet,
-        amount=int(amount / 1000),  # Convert msats to sats
-        memo=f"{pay_link.description}{' - ' + comment if comment else ''}",  # Add comment to memo if present
+        amount=int(amount / 1000),
+        memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
         extra={
             "tag": "ext_lnurluniversal",
             "universal_id": lnurluniversal_id,
@@ -329,23 +323,12 @@ async def api_lnurl_callback(
         }
     )
 
-    # Update the total immediately
     new_total = lnurluniversal.total + amount
     lnurluniversal.total = new_total
     lnurluniversal.state = "withdraw" if new_total > 0 else "payment"
     await update_lnurluniversal(lnurluniversal)
-    
-    logger.info(f"Updated total: {new_total}")
-    logger.info(f"Updated state: {lnurluniversal.state}")
 
-    # Fetch the updated lnurluniversal to confirm changes
-    updated_lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    logger.info(f"Confirmed total after update: {updated_lnurluniversal.total}")
-    logger.info(f"Confirmed state after update: {updated_lnurluniversal.state}")
-
-    # Calculate and return the current balance
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-    logger.info(f"Current balance: {current_balance}")
 
     return {
         "pr": payment_request,
@@ -369,28 +352,17 @@ async def api_withdraw_callback(
   k1: str = Query(...),
   pr: str = Query(...)
 ):
-  logger.info("-------- WITHDRAW CALLBACK START --------")
-  logger.info(f"Withdraw callback received for {lnurluniversal_id}")
-
   lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
   if not lnurluniversal:
       raise HTTPException(status_code=404, detail="Record not found")
 
-  # Extract amount from payment request
   amount = decode_bolt11(pr).amount_msat // 1000  # Convert to sats
-  logger.info(f"Withdraw amount requested: {amount} sats")
-
-  # Check current available balance
   available_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-  logger.info(f"Current available balance: {available_balance} sats")
 
   if amount > available_balance:
       raise HTTPException(status_code=400, detail="Insufficient balance for withdrawal")
 
-  # Add pending withdrawal
   withdraw_id = urlsafe_short_hash()
-  logger.info(f"Creating pending withdrawal record with ID: {withdraw_id}")
-
   await db.execute(
       """
       INSERT INTO pending_withdrawals (id, universal_id, amount, created_time, payment_request)
@@ -400,8 +372,6 @@ async def api_withdraw_callback(
   )
 
   try:
-      # Pay the invoice
-      logger.info(f"Attempting to pay withdrawal invoice for {amount} sats")
       payment_hash = await pay_invoice(
           wallet_id=lnurluniversal.wallet,
           payment_request=pr,
@@ -413,9 +383,8 @@ async def api_withdraw_callback(
               "withdraw_id": withdraw_id
           }
       )
-      logger.info(f"Payment successful with hash: {payment_hash}")
+      logger.info(f"Withdrawal processed for {lnurluniversal_id}. Amount: {amount} sats")
 
-      # Mark withdrawal as completed
       await db.execute(
           """
           UPDATE pending_withdrawals
@@ -425,24 +394,17 @@ async def api_withdraw_callback(
           (pr,)
       )
 
-      # If this withdrawal brings balance to 0, increment uses
-      if amount >= lnurluniversal.total // 1000:  # Convert msats to sats for comparison
-          logger.info("Withdrawal brings balance to 0, incrementing uses")
+      if amount >= lnurluniversal.total // 1000:
           lnurluniversal.uses += 1
 
-      # Update universal total and state
       new_total = max(0, lnurluniversal.total - (amount * 1000))
       lnurluniversal.total = new_total
       if new_total == 0:
           lnurluniversal.state = "payment"
       await update_lnurluniversal(lnurluniversal)
 
-      logger.info(f"Updated balance after withdrawal: {new_total // 1000} sats")
-      logger.info(f"Updated uses count: {lnurluniversal.uses}")
-      logger.info("-------- WITHDRAW CALLBACK END --------")
       return {"status": "OK"}
   except Exception as e:
-      # Mark withdrawal as failed
       await db.execute(
           """
           UPDATE pending_withdrawals
@@ -451,8 +413,6 @@ async def api_withdraw_callback(
           """,
           (pr,)
       )
-      logger.error(f"Failed to pay withdraw invoice: {str(e)}")
-      logger.info("-------- WITHDRAW CALLBACK END WITH ERROR --------")
       raise HTTPException(status_code=500, detail=str(e))
 
 
