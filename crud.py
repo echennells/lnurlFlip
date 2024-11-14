@@ -44,8 +44,6 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     universal = await get_lnurluniversal(lnurluniversal_id)
     if not universal:
         return None
-    logger.info(f"Checking balance for ID {lnurluniversal_id}")
-    logger.info(f"Universal object: {universal}")
     # Get pending withdrawals
     pending = await db.fetchone(
         """
@@ -58,8 +56,6 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     )
     pending_amount = pending["total"] if pending else 0
     available_balance = max(0, universal.total - pending_amount)
-    logger.info(f"Balance calculation for {lnurluniversal_id}:")
-    logger.info(f"Total: {universal.total}, Pending: {pending_amount}, Available: {available_balance}")
     return available_balance
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
