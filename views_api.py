@@ -355,9 +355,16 @@ async def api_lnurl_callback(
     logger.info(f"Confirmed total after update: {updated_lnurluniversal.total}")
     logger.info(f"Confirmed state after update: {updated_lnurluniversal.state}")
 
+    # Calculate and return the current balance
+    current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    logger.info(f"Current balance: {current_balance}")
+
     return {
         "pr": payment_request,
-        "successAction": None,
+        "successAction": {
+            "tag": "message",
+            "message": f"Payment received. Current balance: {current_balance / 1000} sats"
+        },
         "routes": []
     }
 
