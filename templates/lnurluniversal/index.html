@@ -44,8 +44,12 @@
 
 	  <q-tr :props="props">
     <q-td v-for="col in props.cols" :key="col.name" :props="props">
-      <div v-if="col.field == 'balance'">${ col.value / 1000} sats</div>
-      <div v-else-if="col.field == 'wallet'">${ g.user.wallets.find(w => w.id === col.value)?.name || 'Unknown' } (${col.value})</div>
+      <div v-if="col.field == 'balance'">
+        ${ col.value ? (col.value / 1000).toFixed(0) : 0 } sats
+      </div>
+      <div v-else-if="col.field == 'wallet'">
+        ${ g.user.wallets.find(w => w.id === col.value)?.name || 'Unknown' } (${col.value})
+      </div>
       <div v-else>${ col.value }</div>
     </q-td>
     <q-td>
@@ -866,19 +870,17 @@ displayLnurlPayLinks(links) {
 
     this.connection.onmessage = async function (e) {
         console.log("WebSocket message received:", e.data)
-        // Update balance for all records
-        for (const record of self.myex) {
-            try {
-                const response = await LNbits.api.request(
-                    'GET',
-                    `/lnurluniversal/api/v1/balance/${record.id}`,
-                    self.g.user.wallets[0].inkey
-                )
-                console.log(`Balance response for ${record.id}:`, response.data)
-                record.total = response.data.balance
-            } catch (error) {
-                console.error(`Error updating balance for ${record.id}:`, error)
+        try {
+            const data = JSON.parse(e.data)
+            if (data.universal_id) {
+                const record = self.myex.find(r => r.id === data.universal_id)
+                if (record) {
+                    record.balance = data.balance
+                    console.log(`Updated balance for ${data.universal_id}: ${data.balance}`)
+                }
             }
+        } catch (error) {
+            console.error("Error processing WebSocket message:", error)
         }
         self.makeItRain()
     }
