@@ -34,5 +34,9 @@
   ],
   "description_md": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/description.md",
   "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/toc.md",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": [
+    "withdraw",
+    "lnurlp"
+  ]
 }
