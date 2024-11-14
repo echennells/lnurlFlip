@@ -269,7 +269,6 @@
 </q-dialog>
 </div>
 {% endblock %} {% block scripts %} {{ window_vars(user) }}
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.4.0/dist/confetti.browser.min.js"></script>
 <script>
   ///////////////////////////////////////////////////
   //////////an object we can update with data////////
@@ -610,35 +609,6 @@
         console.error("Error updating balance:", error);
     }
      },
-      makeItRain() {
-        console.log("RAIN RAIN RAIN")
-        var duration = 2 * 1000; // 2 seconds
-        var end = Date.now() + duration;
-        var colors = ['#FFD700', '#ffffff']
-        
-        var frame = () => {
-          confetti({
-            particleCount: 2,
-            angle: 60,
-            spread: 55,
-            origin: {x: 0},
-            colors: colors,
-            zIndex: 999999
-          })
-          confetti({
-            particleCount: 2,
-            angle: 120,
-            spread: 55,
-            origin: {x: 1},
-            colors: colors,
-            zIndex: 999999
-          })
-          if (Date.now() < end) {
-            requestAnimationFrame(frame)
-          }
-        }
-        frame()
-      },
 getLnurlPayLinks() {
   const selectedWallet = this.formDialog.data.wallet;
   console.log('========= LNURL PAY LINKS DEBUG =========');
@@ -836,7 +806,7 @@ displayLnurlPayLinks(links) {
         } catch (error) {
             console.error("Error processing WebSocket message:", error)
         }
-        self.makeItRain()
+        // Payment received, update UI if needed
     }
 }
 },
