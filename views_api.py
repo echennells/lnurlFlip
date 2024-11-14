@@ -301,6 +301,7 @@ async def api_lnurl_callback(
         raise HTTPException(status_code=404, detail="Record not found")
 
     logger.info(f"Universal state: {lnurluniversal.state}")
+    logger.info(f"Current total: {lnurluniversal.total}")
 
     pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
     if not pay_link:
@@ -339,6 +340,13 @@ async def api_lnurl_callback(
             "comment": comment if comment else None
         }
     )
+
+    # Update the total immediately
+    new_total = lnurluniversal.total + amount
+    lnurluniversal.total = new_total
+    await update_lnurluniversal(lnurluniversal)
+    
+    logger.info(f"Updated total: {new_total}")
 
     return {
         "pr": payment_request,

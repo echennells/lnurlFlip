@@ -70,12 +70,11 @@ async def on_invoice_paid(payment: Payment) -> None:
     if is_withdrawal:
         amount = -amount  # Make negative for withdrawals
         logger.info(f"This is a withdrawal. Current total: {current_total}, Amount: {amount}")
-        # Check if this withdrawal will complete a use cycle
-        if current_total + amount <= 0:
-            logger.info("This withdrawal will bring balance to 0 or below")
-            current_uses = getattr(lnurluniversal, 'uses', 0)
-            lnurluniversal.uses = current_uses + 1
-            logger.info(f"Incrementing uses from {current_uses} to {lnurluniversal.uses}")
+    else:
+        # For incoming payments, check if the total has already been updated
+        if current_total >= amount:
+            logger.info(f"Total already updated. Current total: {current_total}, Amount: {amount}")
+            return
 
     new_total = current_total + amount
     logger.info(f"Amount being applied: {amount}")
@@ -91,6 +90,13 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     lnurluniversal.total = max(0, new_total)  # Ensure total never goes negative
     logger.info(f"Final values before update - total: {lnurluniversal.total}, state: {lnurluniversal.state}, uses: {getattr(lnurluniversal, 'uses', 0)}")
+
+    # Check if this withdrawal will complete a use cycle
+    if is_withdrawal and lnurluniversal.total == 0:
+        logger.info("This withdrawal will bring balance to 0")
+        current_uses = getattr(lnurluniversal, 'uses', 0)
+        lnurluniversal.uses = current_uses + 1
+        logger.info(f"Incrementing uses from {current_uses} to {lnurluniversal.uses}")
 
     await update_lnurluniversal(lnurluniversal)
 
