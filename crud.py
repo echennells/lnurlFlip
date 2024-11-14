@@ -8,7 +8,7 @@ import logging
 from loguru import logger
 
 db = Database("ext_lnurluniversal")
-table_name = "lnurluniversal.maintable"
+table_name = "maintable"
 
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     await db.execute(
