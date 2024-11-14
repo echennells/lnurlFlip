@@ -344,9 +344,16 @@ async def api_lnurl_callback(
     # Update the total immediately
     new_total = lnurluniversal.total + amount
     lnurluniversal.total = new_total
+    lnurluniversal.state = "withdraw" if new_total > 0 else "payment"
     await update_lnurluniversal(lnurluniversal)
     
     logger.info(f"Updated total: {new_total}")
+    logger.info(f"Updated state: {lnurluniversal.state}")
+
+    # Fetch the updated lnurluniversal to confirm changes
+    updated_lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    logger.info(f"Confirmed total after update: {updated_lnurluniversal.total}")
+    logger.info(f"Confirmed state after update: {updated_lnurluniversal.state}")
 
     return {
         "pr": payment_request,
