@@ -837,7 +837,7 @@ displayLnurlPayLinks(links) {
 */
       connectWebSocket(wallet_id) {
     console.log("Attempting to connect WebSocket for wallet:", wallet_id)
-    self = this
+    const self = this
     if (location.protocol !== 'http:') {
         localUrl =
             'wss://' +
