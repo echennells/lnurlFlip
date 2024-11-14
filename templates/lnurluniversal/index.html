@@ -176,7 +176,7 @@
           type="number"
           v-model.trim="formDialog.data.lnurlpayamount"
           label="LNURL-pay amount"
-	  ></q-input>--!>
+        ></q-input>-->
 	<q-select
         filled
         dense
@@ -208,7 +208,6 @@
             type="submit"
             >Create LnurlUniversal</q-btn
           >
-	  <pre v-text="JSON.stringify(formDialog.data, null, 2)"></pre>
           <q-btn v-close-popup flat color="grey" class="q-ml-auto"
             >Cancel</q-btn
           >
@@ -639,11 +638,12 @@
           })
       },
       makeItRain() {
-        document.getElementById('vue').disabled = true
         console.log("RAIN RAIN RAIN")
-        var end = Date.now() + 2 * 1000000
+        var duration = 2 * 1000; // 2 seconds
+        var end = Date.now() + duration;
         var colors = ['#FFD700', '#ffffff']
-        function frame() {
+        
+        var frame = () => {
           confetti({
             particleCount: 2,
             angle: 60,
@@ -662,8 +662,6 @@
           })
           if (Date.now() < end) {
             requestAnimationFrame(frame)
-          } else {
-            document.getElementById('vue').disabled = false
           }
         }
         frame()
