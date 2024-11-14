@@ -464,16 +464,16 @@
         this.formDialog.show = true
       },
       createLnurlUniversal(wallet, data) {
-      console.log("CREATE CREATE CREATE")
+      console.log("Creating new LnurlUniversal")
         LNbits.api
           .request('POST', '/lnurluniversal/api/v1/myex', this.g.user.wallets[0].adminkey, data)
           .then(response => {
-            console.log('LnurlUniversal creation response:', response.data);
+            console.log('LnurlUniversal created successfully');
             this.myex.push(mapLnurlUniversal(response.data))
             this.closeFormDialog()
           })
           .catch(error => {
-            console.error('Error creating LnurlUniversal:', error);
+            console.error('Error creating LnurlUniversal');
             LNbits.utils.notifyApiError(error)
           })
 
@@ -503,7 +503,7 @@
         var self = this
         var lnurluniversal = _.findWhere(this.myex, {id: tempId})
 
-        console.log("SHOW SHOW SHOW")
+        console.log("Showing LnurlUniversal")
 
         LNbits.api
   	  .request(
@@ -512,7 +512,7 @@
             _.findWhere(self.g.user.wallets, {id: lnurluniversal.wallet}).adminkey
           )
   	  .then(response => {
-            console.log('File created successfully:', response);
+            console.log('File created successfully');
             // Handle successful response here
           })
           .catch(error => {
@@ -526,7 +526,7 @@
         var self = this
         var lnurluniversal = _.findWhere(this.myex, {id: tempId})
 
-        console.log("DELETE DELETE DELETE")
+        console.log("Deleting LnurlUniversal")
 
         LNbits.utils
           .confirmDialog('Are you sure you want to delete this LnurlUniversal?')
@@ -586,7 +586,6 @@
         )
         .then(response => {
             this.qrValue = response.data;
-            console.log("QR value:", this.qrValue);
         });
 
     this.urlDialog.show = true;
@@ -598,7 +597,6 @@
             `/lnurluniversal/api/v1/balance/${id}`,
             this.g.user.wallets[0].inkey
         );
-        console.log("Balance response:", response.data);
         
         // Update the record in the table
         const record = this.myex.find(r => r.id === id);
@@ -611,100 +609,41 @@
      },
 getLnurlPayLinks() {
   const selectedWallet = this.formDialog.data.wallet;
-  console.log('========= LNURL PAY LINKS DEBUG =========');
-  console.log('Selected wallet:', selectedWallet);
-  
-  // Find the correct wallet's key
-  const walletInfo = this.g.user.wallets.find(w => w.id === selectedWallet);
-  const inkey = walletInfo ? walletInfo.inkey : this.g.user.wallets[0].inkey;
-  
-  console.log('Using wallet:', walletInfo?.id);
-  console.log('Using inkey:', inkey);
-  
   LNbits.api
     .request(
       'GET',
       '/lnurlp/api/v1/links',
-      inkey
+      this.g.user.wallets[0].inkey
     )
     .then(response => {
-      console.log('Raw API Response data:', response.data);
-      console.log('Response data type:', typeof response.data);
-      console.log('Is Array?', Array.isArray(response.data));
-      
       if (Array.isArray(response.data)) {
-        console.log('Available Pay Links:');
-        response.data.forEach(link => {
-          console.log({
-            id: link.id,
-            description: link.description,
-            wallet: link.wallet
-          });
-        });
-        
         this.lnurlpOptions = response.data.map(link => ({
           label: `${link.description} (${link.min === link.max ? link.min : `${link.min} - ${link.max}`} sats)`,
           value: link.id,
           lnurl: link.lnurl
         }));
-        console.log('Final lnurlpOptions:', this.lnurlpOptions);
       } else {
-        console.error('Response data is not an array:', response.data);
+        console.error('Response data is not an array');
       }
     })
     .catch(error => {
-      console.error('Error in getLnurlPayLinks:');
-      console.error('Status:', error.response?.status);
-      console.error('Error Data:', error.response?.data);
-      console.error('Full Error:', error);
       LNbits.utils.notifyApiError(error);
     });
 },
 
 getLnurlWithdrawLinks() {
   const selectedWallet = this.formDialog.data.wallet;
-  console.log('========= LNURL WITHDRAW LINKS DEBUG =========');
-  console.log('Selected wallet:', selectedWallet);
-
-  // Find the correct wallet's key
-  const walletInfo = this.g.user.wallets.find(w => w.id === selectedWallet);
-  const adminkey = walletInfo ? walletInfo.adminkey : this.g.user.wallets[0].adminkey;
-  
-  console.log('Using wallet:', walletInfo?.id);
-
   LNbits.api
     .request(
       'GET',
       '/withdraw/api/v1/links?all_wallets=true&limit=10&offset=0',
-      adminkey  // Use the selected wallet's admin key
+      this.g.user.wallets[0].adminkey
     )
     .then(response => {
-      console.log('API Response:', response);
       if (response.data.data) {
-        console.log('Available Withdraw Links:');
-        response.data.data.forEach(link => {
-          console.log({
-            id: link.id,
-            title: link.title,
-            wallet: link.wallet,
-            min: link.min_withdrawable / 1000,
-            max: link.max_withdrawable / 1000
-          });
-        });
-
-        // Filter links for selected wallet
         const filteredLinks = selectedWallet 
           ? response.data.data.filter(link => link.wallet === selectedWallet)
           : response.data.data;
-
-        console.log('Filtered Withdraw Links (after wallet filter):');
-        filteredLinks.forEach(link => {
-          console.log({
-            id: link.id,
-            title: link.title,
-            wallet: link.wallet
-          });
-        });
 
         this.lnurlwOptions = filteredLinks.map(link => ({
           label: `${link.title || 'Untitled'} (${(link.min_withdrawable || 0) / 1000} - ${(link.max_withdrawable || 0) / 1000} sats)`,
@@ -713,19 +652,9 @@ getLnurlWithdrawLinks() {
           min: link.min_withdrawable || 0,
           max: link.max_withdrawable || 0
         }));
-
-        console.log('Final lnurlwOptions:', this.lnurlwOptions);
-      } else {
-        console.log('No withdraw links found in response');
-        console.log('Response structure:', response);
       }
-      console.log('=========================================');
     })
     .catch(error => {
-      console.error('Error in getLnurlWithdrawLinks:');
-      console.error('Status:', error.response?.status);
-      console.error('Error Data:', error.response?.data);
-      console.error('Full Error:', error);
       LNbits.utils.notifyApiError(error);
     });
 },
@@ -760,53 +689,29 @@ displayLnurlPayLinks(links) {
   });
 },
       connectWebSocket(wallet_id) {
-    console.log("Attempting to connect WebSocket for wallet:", wallet_id)
     const self = this
-    if (location.protocol !== 'http:') {
-        localUrl =
-            'wss://' +
-            document.domain +
-            '/api/v1/ws/' +
-            wallet_id
-    } else {
-        localUrl =
-            'ws://' +
-            document.domain +
-            ':' +
-            location.port +
-            '/api/v1/ws/' +
-            wallet_id
-    }
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const localUrl = `${protocol}//${document.domain}${location.port ? ':' + location.port : ''}/api/v1/ws/${wallet_id}`
     this.connection = new WebSocket(localUrl)
-    console.log("WebSocket connection created for URL:", localUrl)
-
-    this.connection.onopen = function() {
-        console.log("WebSocket successfully connected")  // Add this line
-    }
-
-   this.connection.onmessage = function(e) {
-    console.log("WebSocket message received:", e.data)
-    }
-
-   this.connection.onerror = function(error) {
-    console.log("WebSocket error:", error)
-   }
 
     this.connection.onmessage = async function (e) {
-        console.log("WebSocket message received:", e.data)
         try {
             const data = JSON.parse(e.data)
             if (data.universal_id) {
                 const record = self.myex.find(r => r.id === data.universal_id)
                 if (record) {
                     record.balance = data.balance
-                    console.log(`Updated balance for ${data.universal_id}: ${data.balance}`)
+                    console.log(`Payment received for ${data.universal_id}. New balance: ${data.balance} sats`)
+                    if (data.comment) {
+                        console.log(`Comment received: "${data.comment}"`)
+                    }
                 }
+            } else if (data.withdrawal_id) {
+                console.log(`Withdrawal processed for ${data.withdrawal_id}. Amount: ${data.amount} sats`)
             }
         } catch (error) {
             console.error("Error processing WebSocket message:", error)
         }
-        // Payment received, update UI if needed
     }
 }
 },
