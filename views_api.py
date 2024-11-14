@@ -530,7 +530,9 @@ async def api_lnurluniversal_create(
     created_lnurluniversal = await create_lnurluniversal(myext)
     
     # Fetch the created LnurlUniversal to ensure all fields are populated
-    return await get_lnurluniversal(created_lnurluniversal.id)
+    fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
+    logging.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
+    return fetched_lnurluniversal
 
 
 ## Delete a record

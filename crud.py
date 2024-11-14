@@ -31,6 +31,10 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     )
     created = await get_lnurluniversal(data.id)
     logging.info(f"Created LnurlUniversal: {created}")
+    if created.total is None:
+        logging.warning(f"Total is None for created LnurlUniversal {created.id}. Setting to 0.")
+        created.total = 0
+        await update_lnurluniversal(created)
     return created
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
