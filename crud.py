@@ -25,11 +25,11 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
             data.selectedLnurlp,
             data.selectedLnurlw,
             data.state,
-            0,  # Initialize total to 0
-            0   # Initialize uses to 0
+            data.total,
+            data.uses
         ),
     )
-    return data
+    return await get_lnurluniversal(data.id)
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals"""

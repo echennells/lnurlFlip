@@ -520,13 +520,18 @@ async def api_lnurluniversal_create(
         lnurlwithdrawamount=data.lnurlwithdrawamount,
         selectedLnurlp=data.selectedLnurlp,
         selectedLnurlw=data.selectedLnurlw,
-        state=data.state
+        state=data.state,
+        total=0,  # Initialize total to 0
+        uses=0    # Initialize uses to 0
     )
 
     logging.info(f"Creating LnurlUniversal with data: {myext}")
     logging.info(f"LnurlUniversal object: {LnurlUniversal}")
 
-    return await create_lnurluniversal(myext)
+    created_lnurluniversal = await create_lnurluniversal(myext)
+    
+    # Fetch the created LnurlUniversal to ensure all fields are populated
+    return await get_lnurluniversal(created_lnurluniversal.id)
 
 
 ## Delete a record
