@@ -526,7 +526,6 @@ async def api_lnurluniversal_create(
     )
 
     logging.info(f"Creating LnurlUniversal with data: {myext}")
-    logging.info(f"LnurlUniversal object: {LnurlUniversal}")
 
     created_lnurluniversal = await create_lnurluniversal(myext)
     

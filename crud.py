@@ -29,7 +29,9 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
             data.uses
         ),
     )
-    return await get_lnurluniversal(data.id)
+    created = await get_lnurluniversal(data.id)
+    logging.info(f"Created LnurlUniversal: {created}")
+    return created
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals"""
