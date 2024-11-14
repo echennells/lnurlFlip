@@ -27,6 +27,7 @@ from .crud import (
 from .models import CreateLnurlUniversalData, LnurlUniversal
 from .utils import get_withdraw_link_info
 import time
+import logging
 
 lnurluniversal_api_router = APIRouter()
 
