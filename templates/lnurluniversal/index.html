@@ -371,7 +371,7 @@
           )
           return {
             ...mapLnurlUniversal(obj),
-            balance: balanceResponse.data.balance
+            balance: balanceResponse.data.balance || 0
           }
         })
       )
