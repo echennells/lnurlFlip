@@ -46,7 +46,7 @@
         ${ col.value ? (col.value / 1000).toFixed(0) : 0 } sats
       </div>
       <div v-else-if="col.field == 'wallet'">
-        {{ g.user.wallets.find(w => w.id === col.value)?.name || 'Unknown' }} ({{col.value}})
+        ${ getWalletName(col.value) } (${col.value})
       </div>
       <div v-else>{{ col.value }}</div>
     </q-td>
@@ -90,7 +90,7 @@
             {{props.row.comment_count}}
           </q-badge>
           <q-tooltip>
-            {{ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }}
+            ${ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }
           </q-tooltip>
         </q-btn>
         <q-btn
@@ -348,6 +348,10 @@
     ///////////////////////////////////////////////////
 
     methods: {
+      getWalletName(walletId) {
+        const wallet = this.g.user.wallets.find(w => w.id === walletId);
+        return wallet ? wallet.name : 'Unknown';
+      },
       closeFormDialog() {
         this.formDialog.show = false
         this.formDialog.data = {}
