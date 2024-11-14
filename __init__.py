@@ -1,6 +1,7 @@
 import asyncio
 from fastapi import APIRouter
 from loguru import logger
+import logging
 from .crud import db
 from .tasks import wait_for_paid_invoices
 from .views import lnurluniversal_generic_router

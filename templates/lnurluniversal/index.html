@@ -30,13 +30,13 @@
           :columns="myexTable.columns"
           :pagination.sync="myexTable.pagination"
         >
-          <lnurluniversal v-slot:header="props">
+          <template v-slot:header="props">
             <q-tr :props="props">
               <q-th v-for="col in props.cols" :key="col.name" :props="props">
                 ${ col.label }
               </q-th>
             </q-tr>
-          </lnurluniversal>
+          </template>
 
 	  <template v-slot:body="props">
 
@@ -48,7 +48,7 @@
       <div v-else-if="col.field == 'wallet'">
         ${ getWalletName(col.value) } (${col.value})
       </div>
-      <div v-else>{{ col.value }}</div>
+      <div v-else>${ col.value }</div>
     </q-td>
     <q-td>
       <div class="row no-wrap q-gutter-x-xs">
@@ -87,7 +87,7 @@
             floating
             style="top: 0; right: -4px;"
           >
-            {{props.row.comment_count}}
+            ${props.row.comment_count}
           </q-badge>
           <q-tooltip>
             ${ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }

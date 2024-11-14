@@ -1,15 +1,16 @@
+import logging
 # the migration file is where you build your database tables
 # If you create a new release for your extension ,
 # remember the migration file is like a blockchain, never edit only add!
-
 
 async def m001_initial(db):
     """
     Initial templates table.
     """
+    print("Running m001_initial migration...")
     await db.execute(
         """
-        CREATE TABLE lnurluniversal.maintable (
+        CREATE TABLE maintable (
             id TEXT PRIMARY KEY,
             wallet TEXT NOT NULL,
             name TEXT NOT NULL,
@@ -21,6 +22,8 @@ async def m001_initial(db):
         );
     """
     )
+
+    print("m001_initial migration completed")
 
 async def m002_update_schema(db):
     """
