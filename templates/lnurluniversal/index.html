@@ -610,33 +610,6 @@
         console.error("Error updating balance:", error);
     }
      },
-      createInvoice(walletId, lnurluniversalId) {
-        ///////////////////////////////////////////////////
-        ///Simple call to the api to create an invoice/////
-        ///////////////////////////////////////////////////
-        console.log(walletId)
-        console.log("TESTING TESTING TESTING")
-        const wallet = _.findWhere(this.g.user.wallets, {
-          id: walletId
-        })
-        const dataToSend = {
-          out: false,
-          amount: this.invoiceAmount,
-          memo: 'Invoice created by LnurlUniversal',
-          extra: {
-            tag: 'LnurlUniversal',
-            lnurluniversalId: lnurluniversalId
-          }
-        }
-        LNbits.api
-          .request('POST', `/api/v1/payments`, wallet.inkey, dataToSend)
-          .then(response => {
-            this.qrValue = response.data.payment_request
-          })
-          .catch(error => {
-            LNbits.utils.notifyApiError(error)
-          })
-      },
       makeItRain() {
         console.log("RAIN RAIN RAIN")
         var duration = 2 * 1000; // 2 seconds
@@ -816,25 +789,6 @@ displayLnurlPayLinks(links) {
     html: true
   });
 },
-/*  loadLnurlpOptions() {
-  LNbits.api
-    .request(
-      'GET',
-      '/lnurluniversal/api/v1/myex/lnurlp_links',
-      this.g.user.wallets[0].inkey
-    )
-    .then(response => {
-      this.lnurlpOptions = response.data.pay_links.map(link => ({
-        label: `${link.description} (${link.amount})`,
-        value: link.id,
-        lnurl: link.lnurl
-      }));
-    })
-    .catch(error => {
-      LNbits.utils.notifyApiError(error);
-    });
-	},
-*/
       connectWebSocket(wallet_id) {
     console.log("Attempting to connect WebSocket for wallet:", wallet_id)
     const self = this
