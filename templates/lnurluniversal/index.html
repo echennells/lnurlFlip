@@ -1,10 +1,8 @@
-<!--/////////////////////////////////////////////////-->
-<!--//PAGE FOR THE EXTENSIONS BACKEND IN LNBITS//////-->
-<!--/////////////////////////////////////////////////-->
+{% extends "base.html" %}
+{% from "macros.jinja" import window_vars with context %}
 
-{% extends "base.html" %} {% from "macros.jinja" import window_vars with context
-%} {% block page %}
-<div class="row q-col-gutter-md" id="makeItRain">
+{% block page %}
+<div class="row q-col-gutter-md">
   <div class="col-12 col-md-8 col-lg-7 q-gutter-y-md">
     <q-card>
       <q-card-section>
@@ -81,13 +79,13 @@
           icon="chat"
           :color="props.row.comment_count > 0 ? 'primary' : 'grey-5'"
           :disable="props.row.comment_count === 0"
-	  style="min-height: 24px; display: flex; align-items: center;"
+          style="min-height: 24px; display: flex; align-items: center;"
         >
           <q-badge
             v-if="props.row.comment_count > 0"
             color="primary"
             floating
-	    style="top: 0; right: -4px;"
+            style="top: 0; right: -4px;"
           >
             {{props.row.comment_count}}
           </q-badge>
