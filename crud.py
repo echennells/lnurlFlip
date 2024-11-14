@@ -13,6 +13,7 @@ table_name = "maintable"
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     data.total = 0  # Ensure total is initialized to 0
     data.uses = 0   # Ensure uses is initialized to 0
+    data.state = "payment"  # Ensure initial state is set to payment
     await db.execute(
         """
         INSERT INTO lnurluniversal.maintable
