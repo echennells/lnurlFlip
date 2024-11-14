@@ -48,9 +48,9 @@
         ${ col.value ? (col.value / 1000).toFixed(0) : 0 } sats
       </div>
       <div v-else-if="col.field == 'wallet'">
-        ${{ g.user.wallets.find(w => w.id === col.value)?.name || 'Unknown' }} (${col.value})
+        {{ g.user.wallets.find(w => w.id === col.value)?.name || 'Unknown' }} ({{col.value}})
       </div>
-      <div v-else>${ col.value }</div>
+      <div v-else>{{ col.value }}</div>
     </q-td>
     <q-td>
       <div class="row no-wrap q-gutter-x-xs">
@@ -89,10 +89,10 @@
             floating
 	    style="top: 0; right: -4px;"
           >
-            ${props.row.comment_count}
+            {{props.row.comment_count}}
           </q-badge>
           <q-tooltip>
-            ${{ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }}
+            {{ props.row.comment_count > 0 ? 'View Comments (' + props.row.comment_count + ')' : 'No Comments' }}
           </q-tooltip>
         </q-btn>
         <q-btn
