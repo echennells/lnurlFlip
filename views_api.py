@@ -1,29 +1,18 @@
 from http import HTTPStatus
-import os
-
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import Response
 from lnbits.core.crud import get_user
-from lnbits.core.models import WalletTypeInfo, User
+from lnbits.core.models import User
 from lnbits.decorators import WalletTypeInfo, check_user_exists
 from lnbits.core.services import create_invoice, pay_invoice
 from lnbits.extensions.lnurlp.crud import get_pay_links, get_pay_link
-from lnbits.extensions.withdraw.crud import get_withdraw_link
 from lnbits.bolt11 import decode as decode_bolt11
 from loguru import logger
-from typing import Optional, Union
+from typing import Optional
 import shortuuid
-
-from lnbits.db import Database
-from lnbits.decorators import (
-    get_key_type,
-    require_admin_key,
-    require_invoice_key,
-)
-from lnbits.core.crud import get_user
+from lnbits.decorators import get_key_type, require_admin_key, require_invoice_key
 from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
-from starlette.exceptions import HTTPException
 
 from .crud import (
     create_lnurluniversal,
@@ -37,8 +26,6 @@ from .crud import (
 )
 from .models import CreateLnurlUniversalData, LnurlUniversal
 from .utils import get_withdraw_link_info
-import logging
-from pydantic import BaseModel
 import time
 
 lnurluniversal_api_router = APIRouter()

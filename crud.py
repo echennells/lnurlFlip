@@ -1,10 +1,8 @@
 from typing import Optional, Union
 from lnbits.db import Database
-from lnbits.helpers import insert_query, update_query, urlsafe_short_hash
+from lnbits.helpers import urlsafe_short_hash
 from .models import LnurlUniversal, CreateLnurlUniversalData
-from lnbits.core.db import db as core_db
 from fastapi import HTTPException
-import logging
 from loguru import logger
 
 db = Database("ext_lnurluniversal")

@@ -16,8 +16,8 @@ from .migrations import (
 )
 
 logger.debug(
-    "This logged message is from lnurluniversal/__init__.py, you can debug in your "
-    "extension using 'import logger from loguru' and 'logger.debug(<thing-to-log>)'."
+    "LnurlUniversal extension initialized. Use 'from loguru import logger' "
+    "and 'logger.debug(<message>)' for debugging in your extension."
 )
 
 migrations = [
