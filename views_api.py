@@ -291,7 +291,6 @@ async def api_lnurl_callback(
         raise HTTPException(status_code=404, detail="Payment link not found")
 
     if comment:
-        logger.info(f"Payment received for {lnurluniversal_id}. Amount: {amount/1000} sats. Comment: {comment}")
         comment_id = urlsafe_short_hash()
         await db.execute(
             """
@@ -307,8 +306,6 @@ async def api_lnurl_callback(
                 amount
             )
         )
-    else:
-        logger.info(f"Payment received for {lnurluniversal_id}. Amount: {amount/1000} sats.")
 
     payment_hash, payment_request = await create_invoice(
         wallet_id=pay_link.wallet,
@@ -383,7 +380,7 @@ async def api_withdraw_callback(
               "withdraw_id": withdraw_id
           }
       )
-      logger.info(f"Withdrawal processed for {lnurluniversal_id}. Amount: {amount} sats")
+      # Withdrawal processed
 
       await db.execute(
           """

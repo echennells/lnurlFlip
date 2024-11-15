@@ -9,35 +9,28 @@ db = Database("ext_lnurluniversal")
 table_name = "maintable"
 
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
-    try:
-        data.total = 0  # Ensure total is initialized to 0
-        data.uses = 0   # Ensure uses is initialized to 0
-        data.state = "payment"  # Ensure initial state is set to payment
-        logger.info(f"Preparing to insert LnurlUniversal: {data}")
-        await db.execute(
-            """
-            INSERT INTO lnurluniversal.maintable
-            (id, name, wallet, lnurlwithdrawamount, selectedLnurlp, selectedLnurlw, state, total, uses)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                data.id,
-                data.name,
-                data.wallet,
-                data.lnurlwithdrawamount,
-                data.selectedLnurlp,
-                data.selectedLnurlw,
-                data.state,
-                data.total,
-                data.uses
-            ),
-        )
-        created = await get_lnurluniversal(data.id)
-        logger.info(f"Created LnurlUniversal: {created}")
-        return created
-    except Exception as e:
-        logger.error(f"Error creating LnurlUniversal in database: {str(e)}")
-        raise
+    data.total = 0  # Ensure total is initialized to 0
+    data.uses = 0   # Ensure uses is initialized to 0
+    data.state = "payment"  # Ensure initial state is set to payment
+    await db.execute(
+        """
+        INSERT INTO lnurluniversal.maintable
+        (id, name, wallet, lnurlwithdrawamount, selectedLnurlp, selectedLnurlw, state, total, uses)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data.id,
+            data.name,
+            data.wallet,
+            data.lnurlwithdrawamount,
+            data.selectedLnurlp,
+            data.selectedLnurlw,
+            data.state,
+            data.total,
+            data.uses
+        ),
+    )
+    return await get_lnurluniversal(data.id)
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals"""
