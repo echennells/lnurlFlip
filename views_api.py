@@ -98,18 +98,14 @@ async def api_lnurluniversals(
 @lnurluniversal_api_router.get("/api/v1/balance/{lnurluniversal_id}")
 async def api_get_balance(lnurluniversal_id: str) -> dict:
     """Get the current balance (received - withdrawn) for a lnurluniversal entry"""
-    try:
-        balance = await get_lnurluniversal_balance(lnurluniversal_id)
-        return {
-            "id": lnurluniversal_id,
-            "balance": balance,
-            "unit": "satoshis"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    if balance is None:
+        raise HTTPException(status_code=404, detail="LnurlUniversal not found")
+    return {
+        "id": lnurluniversal_id,
+        "balance": balance,
+        "unit": "satoshis"
+    }
 
 @lnurluniversal_api_router.get("/api/v1/lnurl/{lnurluniversal_id}")
 async def api_get_lnurl(request: Request, lnurluniversal_id: str):
