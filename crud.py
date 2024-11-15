@@ -55,13 +55,7 @@ async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]
     row = await db.fetchone(
         f"SELECT * FROM {table_name} WHERE id = ?", (lnurluniversal_id,)
     )
-    if row:
-        lnurluniversal = LnurlUniversal(**row)
-        logger.info(f"Retrieved LnurlUniversal: {lnurluniversal}")
-        return lnurluniversal
-    else:
-        logger.warning(f"LnurlUniversal not found for id: {lnurluniversal_id}")
-        return None
+    return LnurlUniversal(**row) if row else None
 
 async def get_lnurluniversals(wallet_ids: Union[str, list[str]]) -> list[LnurlUniversal]:
     if isinstance(wallet_ids, str):
