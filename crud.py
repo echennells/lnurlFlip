@@ -13,7 +13,6 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
         data.total = 0  # Ensure total is initialized to 0
         data.uses = 0   # Ensure uses is initialized to 0
         data.state = "payment"  # Ensure initial state is set to payment
-        logger.info(f"Preparing to insert LnurlUniversal: {data}")
         await db.execute(
             """
             INSERT INTO lnurluniversal.maintable
@@ -33,7 +32,6 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
             ),
         )
         created = await get_lnurluniversal(data.id)
-        logger.info(f"Created LnurlUniversal: {created}")
         return created
     except Exception as e:
         logger.error(f"Error creating LnurlUniversal in database: {str(e)}")
@@ -44,8 +42,6 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     universal = await get_lnurluniversal(lnurluniversal_id)
     if not universal:
         return None
-    logger.info(f"Checking balance for ID {lnurluniversal_id}")
-    logger.info(f"Universal object: {universal}")
     # Get pending withdrawals
     pending = await db.fetchone(
         """
@@ -58,8 +54,6 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     )
     pending_amount = pending["total"] if pending else 0
     available_balance = max(0, universal.total - pending_amount)
-    logger.info(f"Balance calculation for {lnurluniversal_id}:")
-    logger.info(f"Total: {universal.total}, Pending: {pending_amount}, Available: {available_balance}")
     return available_balance
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
@@ -68,7 +62,6 @@ async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]
     )
     if row:
         lnurluniversal = LnurlUniversal(**row)
-        logger.info(f"Retrieved LnurlUniversal: {lnurluniversal}")
         return lnurluniversal
     else:
         logger.warning(f"LnurlUniversal not found for id: {lnurluniversal_id}")
@@ -85,13 +78,6 @@ async def get_lnurluniversals(wallet_ids: Union[str, list[str]]) -> list[LnurlUn
 
 
 async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
-    logger.info("Updating lnurluniversal with data:")
-    logger.info(f"ID: {data.id}")
-    logger.info(f"Name: {data.name}")
-    logger.info(f"Wallet: {data.wallet}")
-    logger.info(f"State: {data.state}")
-    logger.info(f"Total: {data.total}")
-    logger.info(f"Uses: {data.uses}")
 
     await db.execute(
         """
@@ -118,7 +104,6 @@ async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
             data.id,
         ),
     )
-    logger.info(f"Update complete for ID: {data.id}")
     return data
 
 
