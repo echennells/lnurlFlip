@@ -2,6 +2,7 @@ from http import HTTPStatus
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from fastapi.responses import Response
+from lnbits.helpers import urlsafe_short_hash
 from lnbits.bolt11 import decode as decode_bolt11
 from lnbits.core.crud import get_user
 from lnbits.core.models import User
