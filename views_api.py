@@ -117,27 +117,9 @@ async def api_get_lnurl(request: Request, lnurluniversal_id: str):
     base_url = str(request.base_url).rstrip('/')
     redirect_url = f"{base_url}/lnurluniversal/api/v1/redirect/{lnurluniversal_id}"
 
-    logging.info(f"Redirect URL before encoding: {redirect_url}")
-
     encoded_url = "lightning:" + lnurl_encode(redirect_url)
-    logging.info(f"EncodedURL: {encoded_url}")
     return Response(content=encoded_url, media_type="text/plain")
 
-## Get a single record
-
-
-#@lnurluniversal_api_router.get(
-#    "/api/v1/myex/{lnurluniversal_id}",
-#    status_code=HTTPStatus.OK,
-#    dependencies=[Depends(require_invoice_key)],
-#)
-#async def api_lnurluniversal(lnurluniversal_id: str):
-#    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-#    if not lnurluniversal:
-#        raise HTTPException(
-#            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
-#        )
-#    return lnurluniversal.dict()
 
 @lnurluniversal_api_router.get("/api/v1/qr/{lnurluniversal_id}")
 async def api_get_qr_data(request: Request, lnurluniversal_id: str):
@@ -155,15 +137,8 @@ async def api_get_qr_data(request: Request, lnurluniversal_id: str):
     encoded_url = "lightning:" + lnurl_encode(redirect_url)
     return Response(content=encoded_url, media_type="text/plain")
 
-#@lnurluniversal_api_router.get(
-#   "/api/v1/redirect/{lnurluniversal_id}",
-#   name="lnurluniversal.api_lnurluniversal_redirect"
-#)
-
-
 @lnurluniversal_api_router.get("/api/v1/redirect/{lnurluniversal_id}")
 async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
-   logging.info(f"Redirect request for id: {lnurluniversal_id}")
    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
    if not lnurluniversal:
        raise HTTPException(status_code=404, detail="Record not found")
@@ -177,7 +152,6 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    from lnbits.core.crud import get_wallet
    wallet = await get_wallet(lnurluniversal.wallet)
    actual_balance = wallet.balance_msat // 1000  # Convert to sats
-   logging.info(f"LNbits wallet balance: {actual_balance} sats")
 
    # If wallet balance is less than 60 sats AND no universal balance, force payment mode
    if actual_balance < 60 and universal_balance == 0:
@@ -216,14 +190,10 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        if actual_balance >= (universal_balance_sats + 50):
            # Plenty of balance, allow full universal balance withdrawal
            max_withdrawable = universal_balance  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_sats} sats")
        elif actual_balance >= universal_balance_sats:
            # Can cover universal balance but will go below reserve, allow it anyway
            max_withdrawable = universal_balance  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal (below reserve): {universal_balance_sats} sats")
        else:
-           # Not enough in wallet to cover universal balance
-           logging.info(f"Not enough in wallet ({actual_balance} sats) to cover withdrawal of {universal_balance_sats} sats")
            # Switch to payment mode
            lnurluniversal.state = "payment"
            await update_lnurluniversal(lnurluniversal)
@@ -271,33 +241,22 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
     "/api/v1/lnurl/cb/{lnurluniversal_id}",
     name="lnurluniversal.api_lnurl_callback"
 )
-
-@lnurluniversal_api_router.get(
-    "/api/v1/lnurl/cb/{lnurluniversal_id}",
-    name="lnurluniversal.api_lnurl_callback"
-)
 async def api_lnurl_callback(
     request: Request,
     lnurluniversal_id: str,
     amount: int = Query(...),
     comment: Optional[str] = Query(None)
 ):
-    logger.info(f"Callback received with amount: {amount} for id: {lnurluniversal_id}")
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     if not lnurluniversal:
         logger.error("Universal not found")
         raise HTTPException(status_code=404, detail="Record not found")
-
-    logger.info(f"Universal state: {lnurluniversal.state}")
-    logger.info(f"Current total: {lnurluniversal.total}")
 
     pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
     if not pay_link:
         raise HTTPException(status_code=404, detail="Payment link not found")
 
     if comment:
-        logger.info(f"Comment received: {comment}")
-        
         # Store the comment in the database
         comment_id = urlsafe_short_hash()
         await db.execute(
@@ -334,18 +293,12 @@ async def api_lnurl_callback(
     lnurluniversal.total = new_total
     lnurluniversal.state = "withdraw" if new_total > 0 else "payment"
     await update_lnurluniversal(lnurluniversal)
-    
-    logger.info(f"Updated total: {new_total}")
-    logger.info(f"Updated state: {lnurluniversal.state}")
 
     # Fetch the updated lnurluniversal to confirm changes
     updated_lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    logger.info(f"Confirmed total after update: {updated_lnurluniversal.total}")
-    logger.info(f"Confirmed state after update: {updated_lnurluniversal.state}")
 
     # Calculate and return the current balance
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-    logger.info(f"Current balance: {current_balance}")
 
     return {
         "pr": payment_request,
@@ -364,8 +317,6 @@ async def api_withdraw_callback(
   k1: str = Query(...),
   pr: str = Query(...)
 ):
-  logger.info("-------- WITHDRAW CALLBACK START --------")
-  logger.info(f"Withdraw callback received for {lnurluniversal_id}")
 
   lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
   if not lnurluniversal:
@@ -373,18 +324,15 @@ async def api_withdraw_callback(
 
   # Extract amount from payment request
   amount = decode_bolt11(pr).amount_msat // 1000  # Convert to sats
-  logger.info(f"Withdraw amount requested: {amount} sats")
 
   # Check current available balance
   available_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-  logger.info(f"Current available balance: {available_balance} sats")
 
   if amount > available_balance:
       raise HTTPException(status_code=400, detail="Insufficient balance for withdrawal")
 
   # Add pending withdrawal
   withdraw_id = urlsafe_short_hash()
-  logger.info(f"Creating pending withdrawal record with ID: {withdraw_id}")
 
   await db.execute(
       """
@@ -396,7 +344,6 @@ async def api_withdraw_callback(
 
   try:
       # Pay the invoice
-      logger.info(f"Attempting to pay withdrawal invoice for {amount} sats")
       payment_hash = await pay_invoice(
           wallet_id=lnurluniversal.wallet,
           payment_request=pr,
@@ -408,7 +355,6 @@ async def api_withdraw_callback(
               "withdraw_id": withdraw_id
           }
       )
-      logger.info(f"Payment successful with hash: {payment_hash}")
 
       # Mark withdrawal as completed
       await db.execute(
@@ -422,7 +368,6 @@ async def api_withdraw_callback(
 
       # If this withdrawal brings balance to 0, increment uses
       if amount >= lnurluniversal.total // 1000:  # Convert msats to sats for comparison
-          logger.info("Withdrawal brings balance to 0, incrementing uses")
           lnurluniversal.uses += 1
 
       # Update universal total and state
@@ -432,9 +377,6 @@ async def api_withdraw_callback(
           lnurluniversal.state = "payment"
       await update_lnurluniversal(lnurluniversal)
 
-      logger.info(f"Updated balance after withdrawal: {new_total // 1000} sats")
-      logger.info(f"Updated uses count: {lnurluniversal.uses}")
-      logger.info("-------- WITHDRAW CALLBACK END --------")
       return {"status": "OK"}
   except Exception as e:
       # Mark withdrawal as failed
@@ -447,7 +389,6 @@ async def api_withdraw_callback(
           (pr,)
       )
       logger.error(f"Failed to pay withdraw invoice: {str(e)}")
-      logger.info("-------- WITHDRAW CALLBACK END WITH ERROR --------")
       raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -516,7 +457,6 @@ async def api_lnurluniversal_create(
 ) -> LnurlUniversal:
     try:
         lnurluniversal_id = urlsafe_short_hash()
-        logger.info(f"Generated lnurluniversal_id: {lnurluniversal_id}")
 
         data.wallet = data.wallet or key_type.wallet.id
         myext = LnurlUniversal(
@@ -531,14 +471,10 @@ async def api_lnurluniversal_create(
             uses=0    # Initialize uses to 0
         )
 
-        logger.info(f"Creating LnurlUniversal with data: {myext}")
-
         created_lnurluniversal = await create_lnurluniversal(myext)
-        logger.info(f"Created LnurlUniversal: {created_lnurluniversal}")
         
         # Fetch the created LnurlUniversal to ensure all fields are populated
         fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
-        logger.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
         
         return fetched_lnurluniversal
     except Exception as e:
@@ -565,11 +501,6 @@ async def api_lnurluniversal_delete(
 
     await delete_lnurluniversal(lnurluniversal_id)
     return "", HTTPStatus.NO_CONTENT
-
-
-# ANY OTHER ENDPOINTS YOU NEED
-
-## This endpoint creates a payment
 
 
 @lnurluniversal_api_router.post(
@@ -616,6 +547,4 @@ async def api_get_comments(
 
     comments = await get_universal_comments(universal_id)
     return comments
-
-# LNURL-specific routes
 

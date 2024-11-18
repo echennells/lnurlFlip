@@ -16,11 +16,6 @@ from .migrations import (
     m008_add_comments,
 )
 
-logger.debug(
-    "LnurlUniversal extension initialized. Use 'from loguru import logger' "
-    "and 'logger.debug(<message>)' for debugging in your extension."
-)
-
 migrations = [
     m001_initial,
     m002_update_schema,
@@ -56,7 +51,6 @@ def lnurluniversal_start():
     
     async def run_migrations():
         try:
-            logger.info("Running initial migration...")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS maintable (
@@ -72,9 +66,7 @@ def lnurluniversal_start():
                 );
                 """
             )
-            logger.info("Initial migration completed")
             
-            logger.info("Creating pending withdrawals table...")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS pending_withdrawals (
@@ -88,9 +80,7 @@ def lnurluniversal_start():
                 );
                 """
             )
-            logger.info("Pending withdrawals table created")
             
-            logger.info("Creating comments table...")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS invoice_comments (
@@ -103,7 +93,6 @@ def lnurluniversal_start():
                 );
                 """
             )
-            logger.info("Comments table created")
             
         except Exception as e:
             logger.error(f"Migration error: {str(e)}")

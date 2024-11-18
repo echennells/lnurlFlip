@@ -16,12 +16,6 @@ lnurluniversal_generic_router = APIRouter()
 def lnurluniversal_renderer():
     return template_renderer(["lnurluniversal/templates"])
 
-
-#######################################
-##### ADD YOUR PAGE ENDPOINTS HERE ####
-#######################################
-
-
 # Backend admin page
 
 

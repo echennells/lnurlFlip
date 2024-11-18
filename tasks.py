@@ -9,33 +9,18 @@ from loguru import logger
 
 from .crud import get_lnurluniversal, update_lnurluniversal
 
-#######################################
-########## RUN YOUR TASKS HERE ########
-#######################################
-
-# The usual task is to listen to invoices related to this extension
-
-
 async def wait_for_paid_invoices():
     invoice_queue = asyncio.Queue()
     extension_name = get_current_extension_name()
-    logger.warning(f"Starting invoice listener for extension: {extension_name}")  # Changed to warning for visibility
     
     register_invoice_listener(invoice_queue, extension_name)
-    logger.warning("Invoice listener registered successfully")
-    
+
     while True:
         try:
-            logger.warning("Waiting for next payment...")
             payment = await invoice_queue.get()
-            logger.warning(f"Received payment: {payment.checking_id}")
-            logger.warning(f"Payment extra data: {payment.extra}")
-            if payment.extra and isinstance(payment.extra, dict):
-                logger.warning(f"Payment tag: {payment.extra.get('tag')}")
             await on_invoice_paid(payment)
         except Exception as e:
-            logger.error(f"Error processing payment: {str(e)}")
-
+            print(f"Error processing payment: {str(e)}")
 
 # Do somethhing when an invoice related top this extension is paid
 
@@ -43,14 +28,8 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")
-    if not lnurluniversal_id:
-        logger.warning(f"Payment missing universal_id: {payment}")
-        return
 
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        logger.error(f"Universal not found for id: {lnurluniversal_id}")
-        return
 
     # All payments update the total (positive for incoming, negative for withdrawals)
     current_total = lnurluniversal.total or 0
@@ -76,13 +55,6 @@ async def on_invoice_paid(payment: Payment) -> None:
         lnurluniversal.state = "withdraw"
 
     lnurluniversal.total = max(0, new_total)  # Ensure total never goes negative
-
-    # Check if this withdrawal will complete a use cycle
-    if is_withdrawal and lnurluniversal.total == 0:
-        logger.info("This withdrawal will bring balance to 0")
-        current_uses = getattr(lnurluniversal, 'uses', 0)
-        lnurluniversal.uses = current_uses + 1
-        logger.info(f"Incrementing uses from {current_uses} to {lnurluniversal.uses}")
 
     await update_lnurluniversal(lnurluniversal)
 
