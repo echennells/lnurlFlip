@@ -1,9 +1,10 @@
 from typing import Optional, Union
+from fastapi import HTTPException
 from lnbits.db import Database
 from lnbits.helpers import urlsafe_short_hash
-from .models import LnurlUniversal, CreateLnurlUniversalData
-from fastapi import HTTPException
 from loguru import logger
+
+from .models import LnurlUniversal, CreateLnurlUniversalData
 
 db = Database("ext_lnurluniversal")
 table_name = "maintable"

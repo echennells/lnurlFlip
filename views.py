@@ -1,12 +1,11 @@
 from http import HTTPStatus
-
 from fastapi import APIRouter, Depends, Request
 from lnbits.core.models import User
 from lnbits.decorators import check_user_exists
 from lnbits.helpers import template_renderer
 from lnbits.settings import settings
-from starlette.exceptions import HTTPException
-from starlette.responses import HTMLResponse
+from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
 
 from .crud import get_lnurluniversal
 
