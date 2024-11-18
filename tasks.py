@@ -40,10 +40,6 @@ async def wait_for_paid_invoices():
 # Do somethhing when an invoice related top this extension is paid
 
 async def on_invoice_paid(payment: Payment) -> None:
-    logger.info("-------- PAYMENT PROCESSING START --------")
-    logger.info(f"Processing payment in on_invoice_paid: {payment}")
-    logger.info(f"Payment extra data: {payment.extra}")
-    logger.info(f"Payment amount: {payment.amount}")
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")
@@ -58,38 +54,28 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     # All payments update the total (positive for incoming, negative for withdrawals)
     current_total = lnurluniversal.total or 0
-    logger.info(f"Current total before update: {current_total}")
-    logger.info(f"Current uses value: {getattr(lnurluniversal, 'uses', 0)}")
 
     # Check if this is a withdrawal
     is_withdrawal = payment.extra.get('lnurlwithdraw', False)
-    logger.info(f"Is withdrawal: {is_withdrawal}")
 
     # Calculate new total based on payment type
     amount = abs(payment.amount)  # Convert to positive first
     if is_withdrawal:
         amount = -amount  # Make negative for withdrawals
-        logger.info(f"This is a withdrawal. Current total: {current_total}, Amount: {amount}")
     else:
         # For incoming payments, check if the total has already been updated
         if current_total >= amount:
-            logger.info(f"Total already updated. Current total: {current_total}, Amount: {amount}")
             return
 
     new_total = current_total + amount
-    logger.info(f"Amount being applied: {amount}")
-    logger.info(f"New total after calculation: {new_total}")
 
     # Update state based on new total
     if new_total <= 0:
         lnurluniversal.state = "payment"
-        logger.info("Setting state to payment")
     else:
         lnurluniversal.state = "withdraw"
-        logger.info("Setting state to withdraw")
 
     lnurluniversal.total = max(0, new_total)  # Ensure total never goes negative
-    logger.info(f"Final values before update - total: {lnurluniversal.total}, state: {lnurluniversal.state}, uses: {getattr(lnurluniversal, 'uses', 0)}")
 
     # Check if this withdrawal will complete a use cycle
     if is_withdrawal and lnurluniversal.total == 0:
@@ -102,5 +88,3 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     # Verify the update worked
     updated = await get_lnurluniversal(lnurluniversal_id)
-    logger.info(f"After update verification - total: {updated.total}, state: {updated.state}, uses: {getattr(updated, 'uses', 0)}")
-    logger.info("-------- PAYMENT PROCESSING END --------")
