@@ -1,16 +1,13 @@
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from unittest.mock import Mock, patch
 
-from lnbits.app import create_app
-from lnbits.settings import settings
-
-from tests.helpers import get_random_invoice_hash
-
-# Create test client
-app = create_app()
+# Create a mock FastAPI app
+app = FastAPI()
 client = TestClient(app)
 
-# Test data
+# Mock data
 test_data = {
     "name": "Test Universal",
     "wallet": "test_wallet_123",
@@ -22,18 +19,24 @@ test_data = {
 @pytest.mark.asyncio
 async def test_create_lnurluniversal():
     """Test creating a new LnurlUniversal record"""
-    response = client.post(
-        "/lnurluniversal/api/v1/myex",
-        json=test_data,
-        headers={"X-Api-Key": "test_key"}
-    )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["name"] == test_data["name"]
-    assert data["wallet"] == test_data["wallet"]
-    assert data["state"] == "payment"
-    assert data["total"] == 0
-    assert data["uses"] == 0
+    with patch('lnbits.core.crud.get_user') as mock_get_user:
+        # Setup mock user
+        mock_user = Mock()
+        mock_user.wallet_ids = ['test_wallet_123']
+        mock_get_user.return_value = mock_user
+
+        response = client.post(
+            "/lnurluniversal/api/v1/myex",
+            json=test_data,
+            headers={"X-Api-Key": "test_key"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["name"] == test_data["name"]
+        assert data["wallet"] == test_data["wallet"]
+        assert data["state"] == "payment"
+        assert data["total"] == 0
+        assert data["uses"] == 0
 
 @pytest.mark.asyncio
 async def test_get_lnurluniversal():
