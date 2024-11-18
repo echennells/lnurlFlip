@@ -1,6 +1,7 @@
+"""Background tasks for processing payments"""
+
 import asyncio
 import logging
-
 from lnbits.core.models import Payment
 from lnbits.core.services import websocket_updater
 from lnbits.helpers import get_current_extension_name

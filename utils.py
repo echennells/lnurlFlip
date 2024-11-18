@@ -1,6 +1,9 @@
+"""Utility functions for LnurlUniversal extension"""
+
 from lnbits.extensions.withdraw.crud import get_withdraw_link
 
 async def get_withdraw_link_info(withdraw_id: str):
+    """Retrieves and formats withdraw link information"""
     try:
         withdraw_link = await get_withdraw_link(withdraw_id)
         if withdraw_link:

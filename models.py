@@ -1,7 +1,6 @@
-# Data models for your extension
+"""Data models for LnurlUniversal extension"""
 
 from typing import Optional
-
 from pydantic import BaseModel
 
 

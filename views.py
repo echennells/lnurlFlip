@@ -1,3 +1,5 @@
+"""Web routes for LnurlUniversal extension frontend"""
+
 from http import HTTPStatus
 from fastapi import APIRouter, Depends, Request
 from lnbits.core.models import User

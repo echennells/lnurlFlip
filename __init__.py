@@ -1,3 +1,5 @@
+"""LnurlUniversal extension for LNbits - enables universal LNURL handling"""
+
 import asyncio
 from fastapi import APIRouter
 from loguru import logger

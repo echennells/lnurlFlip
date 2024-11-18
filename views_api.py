@@ -1,3 +1,5 @@
+"""API endpoints for LnurlUniversal extension"""
+
 from http import HTTPStatus
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
