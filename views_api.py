@@ -349,12 +349,7 @@ async def api_lnurl_callback(
 
     return {
         "pr": payment_request,
-        "successAction": {
-            "tag": "message",
-            "message": f"Payment received. Current balance: {current_balance / 1000} sats"
-        },
-        "routes": [],
-        "balance": current_balance  # Add this line to include the balance in the response
+        "routes": []
     }
 
 
