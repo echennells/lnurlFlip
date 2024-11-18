@@ -13,7 +13,6 @@ from lnbits.decorators import (
     require_admin_key
 )
 from lnbits.extensions.lnurlp.crud import get_pay_links, get_pay_link
-from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
 from loguru import logger
 

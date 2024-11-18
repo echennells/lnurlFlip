@@ -40,7 +40,6 @@ async def lnurluniversal(request: Request, lnurluniversal_id):
         {
             "request": request,
             "lnurluniversal_id": lnurluniversal_id,
-            "lnurlpay": lnurluniversal.lnurlpay,
             "web_manifest": f"/lnurluniversal/manifest/{lnurluniversal_id}.webmanifest",
         },
     )

@@ -93,7 +93,6 @@ async def m004_add_total(db):
         ADD COLUMN total INTEGER NOT NULL DEFAULT 0;
         """
     )
-    return balance
 
 # Add to migrations.py
 async def m005_add_pending_withdrawals(db):

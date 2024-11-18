@@ -1,5 +1,4 @@
 from typing import Optional, Union
-from fastapi import HTTPException
 from lnbits.db import Database
 from lnbits.helpers import urlsafe_short_hash
 from loguru import logger

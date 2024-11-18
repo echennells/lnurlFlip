@@ -11,7 +11,6 @@ class CreateLnurlUniversalData(BaseModel):
     lnurlwithdrawamount: Optional[int] = None  # Allow None explicitly
     selectedLnurlp: str
     selectedLnurlw: str
-    state: str = "payment"
 
 class LnurlUniversal(BaseModel):
     id: str
