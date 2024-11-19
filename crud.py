@@ -1,5 +1,6 @@
 """Database operations for LnurlUniversal extension"""
 
+import time
 from typing import Optional, Union
 from lnbits.db import Database
 from lnbits.helpers import urlsafe_short_hash

@@ -27,6 +27,7 @@ from .crud import (
     update_lnurluniversal,
     get_lnurluniversal_balance,
     get_universal_comments,
+    process_withdrawal,
     db
 )
 from .models import CreateLnurlUniversalData, LnurlUniversal
