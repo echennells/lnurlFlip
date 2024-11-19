@@ -336,17 +336,22 @@ async def api_withdraw_callback(
   if amount > available_balance:
       raise HTTPException(status_code=400, detail="Insufficient balance for withdrawal")
 
-  # Add pending withdrawal
   withdraw_id = urlsafe_short_hash()
-
-  await db.execute(
-      """
-      INSERT INTO pending_withdrawals (id, universal_id, amount, created_time, payment_request)
-      VALUES (?, ?, ?, ?, ?)
-      """,
-      (withdraw_id, lnurluniversal_id, amount, int(time.time()), pr)
+  
+  # Process withdrawal with transaction safety
+  success = await process_withdrawal(
+      universal_id=lnurluniversal_id,
+      amount=amount,
+      payment_request=pr,
+      withdraw_id=withdraw_id
   )
-
+  
+  if not success:
+      raise HTTPException(
+          status_code=400,
+          detail="Withdrawal failed - insufficient balance or processing error"
+      )
+      
   try:
       # Pay the invoice
       payment_hash = await pay_invoice(
@@ -370,17 +375,6 @@ async def api_withdraw_callback(
           """,
           (pr,)
       )
-
-      # If this withdrawal brings balance to 0, increment uses
-      if amount >= lnurluniversal.total // 1000:  # Convert msats to sats for comparison
-          lnurluniversal.uses += 1
-
-      # Update universal total and state
-      new_total = max(0, lnurluniversal.total - (amount * 1000))
-      lnurluniversal.total = new_total
-      if new_total == 0:
-          lnurluniversal.state = "payment"
-      await update_lnurluniversal(lnurluniversal)
 
       return {"status": "OK"}
   except Exception as e:

@@ -40,22 +40,74 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals"""
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
-        return None
-    # Get pending withdrawals
-    pending = await db.fetchone(
-        """
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM pending_withdrawals
-        WHERE universal_id = ?
-        AND status = 'pending'
-        """,
-        (lnurluniversal_id,)
-    )
-    pending_amount = pending["total"] if pending else 0
-    available_balance = max(0, universal.total - pending_amount)
-    return available_balance
+    async with db.lock:
+        universal = await get_lnurluniversal(lnurluniversal_id)
+        if not universal:
+            return None
+        # Get pending withdrawals
+        pending = await db.fetchone(
+            """
+            SELECT COALESCE(SUM(amount), 0) as total
+            FROM pending_withdrawals
+            WHERE universal_id = ?
+            AND status = 'pending'
+            """,
+            (lnurluniversal_id,)
+        )
+        pending_amount = pending["total"] if pending else 0
+        available_balance = max(0, universal.total - pending_amount)
+        return available_balance
+
+async def process_withdrawal(
+    universal_id: str,
+    amount: int,
+    payment_request: str,
+    withdraw_id: str
+) -> bool:
+    """Process withdrawal with proper locking and transaction safety"""
+    async with db.lock:
+        try:
+            await db.execute("BEGIN TRANSACTION")
+            
+            # Get current balance within transaction
+            universal = await get_lnurluniversal(universal_id)
+            if not universal:
+                await db.execute("ROLLBACK")
+                return False
+                
+            available_balance = await get_lnurluniversal_balance(universal_id)
+            if amount > available_balance:
+                await db.execute("ROLLBACK")
+                return False
+
+            # Add pending withdrawal
+            await db.execute(
+                """
+                INSERT INTO pending_withdrawals 
+                (id, universal_id, amount, created_time, payment_request)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (withdraw_id, universal_id, amount, int(time.time()), payment_request)
+            )
+
+            # Update universal total
+            new_total = max(0, universal.total - (amount * 1000))
+            if amount >= universal.total // 1000:
+                universal.uses += 1
+            
+            universal.total = new_total
+            if new_total == 0:
+                universal.state = "payment"
+                
+            await update_lnurluniversal(universal)
+            
+            await db.execute("COMMIT")
+            return True
+            
+        except Exception as e:
+            await db.execute("ROLLBACK")
+            logger.error(f"Withdrawal processing error: {str(e)}")
+            return False
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
     row = await db.fetchone(
