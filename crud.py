@@ -8,7 +8,6 @@ from loguru import logger
 from .models import LnurlUniversal, CreateLnurlUniversalData
 
 db = Database("ext_lnurluniversal")
-table_name = "maintable"
 
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     try:
@@ -60,7 +59,7 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
     row = await db.fetchone(
-        f"SELECT * FROM {table_name} WHERE id = ?", (lnurluniversal_id,)
+        "SELECT * FROM maintable WHERE id = ?", (lnurluniversal_id,)
     )
     if row:
         lnurluniversal = LnurlUniversal(**row)
@@ -74,7 +73,7 @@ async def get_lnurluniversals(wallet_ids: Union[str, list[str]]) -> list[LnurlUn
         wallet_ids = [wallet_ids]
     q = ",".join(["?"] * len(wallet_ids))
     rows = await db.fetchall(
-        f"SELECT * FROM {table_name} WHERE wallet IN ({q})", (*wallet_ids,)
+        "SELECT * FROM maintable WHERE wallet IN (" + q + ")", (*wallet_ids,)
     )
     return [LnurlUniversal(**row) for row in rows]
 
@@ -110,7 +109,7 @@ async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
 
 
 async def delete_lnurluniversal(lnurluniversal_id: str) -> None:
-    await db.execute(f"DELETE FROM {table_name} WHERE id = ?", (lnurluniversal_id,))
+    await db.execute("DELETE FROM maintable WHERE id = ?", (lnurluniversal_id,))
 
 async def get_universal_comments(universal_id: str) -> list[dict]:
     """Get all comments for a universal"""
