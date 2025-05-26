@@ -28,7 +28,7 @@ def lnurluniversal_renderer():
 @lnurluniversal_generic_router.get("/", response_class=HTMLResponse)
 async def index(request: Request, user: User = Depends(check_user_exists)):
     return lnurluniversal_renderer().TemplateResponse(
-        "lnurluniversal/index.html", {"request": request, "user": user.dict()}
+        "lnurluniversal/index.html", {"request": request, "user": user.json()}
     )
 
 

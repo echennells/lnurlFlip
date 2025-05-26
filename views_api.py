@@ -10,7 +10,7 @@ from lnbits.bolt11 import decode as decode_bolt11
 from loguru import logger
 from typing import Optional
 import shortuuid
-from lnbits.decorators import get_key_type, require_admin_key, require_invoice_key
+from lnbits.decorators import require_admin_key, require_invoice_key
 from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
 
@@ -41,7 +41,7 @@ logging.basicConfig(level=logging.INFO)
 ## Get all the records belonging to the user
 
 @lnurluniversal_api_router.get("/api/v1/myex/lnurlp_links")
-async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(get_key_type)):
+async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_key)):
     try:
         pay_links = await get_pay_links(wallet_ids=[wallet.wallet.id])
 
@@ -73,7 +73,7 @@ async def api_get_withdraw_link(withdraw_id: str, user: User = Depends(check_use
 @lnurluniversal_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
 async def api_lnurluniversals(
     all_wallets: bool = Query(False),
-    wallet: WalletTypeInfo = Depends(get_key_type),
+    wallet: WalletTypeInfo = Depends(require_invoice_key),
 ):
     wallet_ids = [wallet.wallet.id]
     if all_wallets:
@@ -86,8 +86,8 @@ async def api_lnurluniversals(
     for record in records:
         # Get comment count for each record
         comment_count = await db.fetchone(
-            "SELECT COUNT(*) as count FROM invoice_comments WHERE universal_id = ?",
-            (record.id,)
+            "SELECT COUNT(*) as count FROM invoice_comments WHERE universal_id = :universal_id",
+            {"universal_id": record.id}
         )
         data = record.dict()
         data['comment_count'] = comment_count['count'] if comment_count else 0
@@ -287,15 +287,15 @@ async def api_lnurl_callback(
             """
             INSERT INTO lnurluniversal.invoice_comments 
             (id, universal_id, comment, timestamp, amount)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (:id, :universal_id, :comment, :timestamp, :amount)
             """,
-            (
-                comment_id,
-                lnurluniversal_id,
-                comment,
-                int(time.time()),
-                amount
-            )
+            {
+                "id": comment_id,
+                "universal_id": lnurluniversal_id,
+                "comment": comment,
+                "timestamp": int(time.time()),
+                "amount": amount
+            }
         )
 
     payment_hash, payment_request = await create_invoice(
@@ -354,9 +354,15 @@ async def api_withdraw_callback(
   await db.execute(
       """
       INSERT INTO pending_withdrawals (id, universal_id, amount, created_time, payment_request)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (:id, :universal_id, :amount, :created_time, :payment_request)
       """,
-      (withdraw_id, lnurluniversal_id, amount, int(time.time()), pr)
+      {
+          "id": withdraw_id,
+          "universal_id": lnurluniversal_id,
+          "amount": amount,
+          "created_time": int(time.time()),
+          "payment_request": pr
+      }
   )
 
   try:
@@ -377,9 +383,9 @@ async def api_withdraw_callback(
           """
           UPDATE pending_withdrawals
           SET status = 'completed'
-          WHERE payment_request = ?
+          WHERE payment_request = :payment_request
           """,
-          (pr,)
+          {"payment_request": pr}
       )
 
       if amount >= lnurluniversal.total // 1000:
@@ -397,9 +403,9 @@ async def api_withdraw_callback(
           """
           UPDATE pending_withdrawals
           SET status = 'failed'
-          WHERE payment_request = ?
+          WHERE payment_request = :payment_request
           """,
-          (pr,)
+          {"payment_request": pr}
       )
       raise HTTPException(status_code=500, detail=str(e))
 
@@ -436,7 +442,7 @@ async def api_lnurl_response(request: Request, lnurluniversal_id: str):
 async def api_lnurluniversal_update(
     data: CreateLnurlUniversalData,
     lnurluniversal_id: str,
-    wallet: WalletTypeInfo = Depends(get_key_type),
+    wallet: WalletTypeInfo = Depends(require_admin_key),
 ) -> LnurlUniversal:
     if not lnurluniversal_id:
         raise HTTPException(
