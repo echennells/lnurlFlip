@@ -300,7 +300,7 @@ async def api_lnurl_callback(
             }
         )
 
-    payment_hash, payment_request = await create_invoice(
+    payment = await create_invoice(
         wallet_id=pay_link.wallet,
         amount=int(amount / 1000),
         memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
@@ -321,7 +321,7 @@ async def api_lnurl_callback(
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
 
     return {
-        "pr": payment_request,
+        "pr": payment.bolt11,
         "successAction": {
             "tag": "message",
             "message": f"Payment received. Current balance: {current_balance / 1000} sats"
@@ -550,7 +550,7 @@ async def api_lnurluniversal_create_invoice(
     # so tasks.py can grab the payment once its paid
 
     try:
-        payment_hash, payment_request = await create_invoice(
+        payment = await create_invoice(
             wallet_id=lnurluniversal.wallet,
             amount=amount,
             memo=f"{memo} to {lnurluniversal.name}" if memo else f"{lnurluniversal.name}",
@@ -564,7 +564,7 @@ async def api_lnurluniversal_create_invoice(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
 
-    return {"payment_hash": payment_hash, "payment_request": payment_request}
+    return {"payment_hash": payment.payment_hash, "payment_request": payment.bolt11}
 
 @lnurluniversal_api_router.get("/api/v1/comments/{universal_id}")
 async def api_get_comments(
