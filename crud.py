@@ -102,8 +102,7 @@ async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     await db.update(
         "lnurluniversal.maintable", 
         data,
-        "WHERE id = :id",
-        {"id": data.id}
+        "WHERE id = :id"
     )
     
     return data

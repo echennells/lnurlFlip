@@ -117,18 +117,29 @@ async def api_get_lnurl(request: Request, lnurluniversal_id: str):
 ## Get a single record
 
 
-#@lnurluniversal_api_router.get(
-#    "/api/v1/myex/{lnurluniversal_id}",
-#    status_code=HTTPStatus.OK,
-#    dependencies=[Depends(require_invoice_key)],
-#)
-#async def api_lnurluniversal(lnurluniversal_id: str):
-#    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-#    if not lnurluniversal:
-#        raise HTTPException(
-#            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
-#        )
-#    return lnurluniversal.dict()
+@lnurluniversal_api_router.get(
+    "/api/v1/myex/{lnurluniversal_id}",
+    status_code=HTTPStatus.OK,
+    dependencies=[Depends(require_invoice_key)],
+)
+async def api_lnurluniversal(lnurluniversal_id: str):
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+        )
+    
+    # Add balance and comment count like the list endpoint
+    balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    comment_count = await db.fetchone(
+        "SELECT COUNT(*) as count FROM lnurluniversal.invoice_comments WHERE universal_id = :universal_id",
+        {"universal_id": lnurluniversal_id}
+    )
+    
+    data = lnurluniversal.dict()
+    data['balance'] = balance
+    data['comment_count'] = comment_count['count'] if comment_count else 0
+    return data
 
 @lnurluniversal_api_router.get("/api/v1/qr/{lnurluniversal_id}")
 async def api_get_qr_data(request: Request, lnurluniversal_id: str):
@@ -146,10 +157,6 @@ async def api_get_qr_data(request: Request, lnurluniversal_id: str):
     encoded_url = "lightning:" + lnurl_encode(redirect_url)
     return Response(content=encoded_url, media_type="text/plain")
 
-#@lnurluniversal_api_router.get(
-#   "/api/v1/redirect/{lnurluniversal_id}",
-#   name="lnurluniversal.api_lnurluniversal_redirect"
-#)
 
 
 @lnurluniversal_api_router.get("/api/v1/redirect/{lnurluniversal_id}")
@@ -257,11 +264,6 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            "maxSendable": pay_link.max * 1000,
            "metadata": f'[["text/plain", "{pay_link.description}"]]'
        }
-
-@lnurluniversal_api_router.get(
-    "/api/v1/lnurl/cb/{lnurluniversal_id}",
-    name="lnurluniversal.api_lnurl_callback"
-)
 
 @lnurluniversal_api_router.get(
     "/api/v1/lnurl/cb/{lnurluniversal_id}",
