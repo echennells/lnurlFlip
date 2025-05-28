@@ -210,15 +210,19 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            lnurluniversal_id=lnurluniversal_id
        ))
 
-       # Calculate how much can be withdrawn
-       if actual_balance >= (universal_balance_sats + 50):
-           # Plenty of balance, allow full universal balance withdrawal
+       # Calculate how much can be withdrawn (accounting for routing fees)
+       # Estimate routing fee reserve (1% + 2 sats minimum)
+       estimated_fee_sats = max(2, int(universal_balance_sats * 0.01) + 2)
+       
+       if actual_balance >= (universal_balance_sats + estimated_fee_sats):
+           # Wallet has enough for full withdrawal plus fees
            max_withdrawable = universal_balance  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_sats} sats")
-       elif actual_balance >= universal_balance_sats:
-           # Can cover universal balance but will go below reserve, allow it anyway
-           max_withdrawable = universal_balance  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal (below reserve): {universal_balance_sats} sats")
+           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_sats} sats (wallet has {actual_balance} sats)")
+       elif actual_balance > estimated_fee_sats + 10:  # At least 10 sats withdrawable after fees
+           # Reduce withdrawable amount to leave room for fees
+           max_withdrawable_sats = actual_balance - estimated_fee_sats
+           max_withdrawable = min(universal_balance, max_withdrawable_sats * 1000)  # Convert to msats
+           logging.info(f"Limiting withdrawal to {max_withdrawable_sats} sats to account for {estimated_fee_sats} sats in fees")
        else:
            # Not enough in wallet to cover universal balance
            logging.info(f"Not enough in wallet ({actual_balance} sats) to cover withdrawal of {universal_balance_sats} sats")
@@ -313,11 +317,7 @@ async def api_lnurl_callback(
         }
     )
 
-    new_total = lnurluniversal.total + amount
-    lnurluniversal.total = new_total
-    lnurluniversal.state = "withdraw" if new_total > 0 else "payment"
-    await update_lnurluniversal(lnurluniversal)
-
+    # Do not update balance here - it will be updated when payment is confirmed in tasks.py
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
 
     return {
@@ -368,6 +368,31 @@ async def api_withdraw_callback(
   )
 
   try:
+      # Check wallet balance to ensure we have enough for routing fees
+      from lnbits.core.crud import get_wallet
+      wallet = await get_wallet(lnurluniversal.wallet)
+      wallet_balance_sats = wallet.balance_msat // 1000
+      
+      # Estimate routing fee reserve (typically 1% + 2 sats minimum)
+      fee_reserve_sats = max(2, int(amount * 0.01) + 2)
+      
+      # Check if wallet has enough balance for withdrawal + fees
+      if wallet_balance_sats < (amount + fee_reserve_sats):
+          # Calculate maximum withdrawable amount
+          max_withdrawable = max(0, wallet_balance_sats - fee_reserve_sats)
+          
+          if max_withdrawable < 10:  # Less than 10 sats is not worth withdrawing
+              return {
+                  "status": "ERROR", 
+                  "reason": f"Insufficient balance. Wallet needs {fee_reserve_sats} sats reserved for fees."
+              }
+          
+          # Provide helpful error with maximum withdrawable amount
+          return {
+              "status": "ERROR",
+              "reason": f"Amount too high. Max withdrawable: {max_withdrawable} sats (after {fee_reserve_sats} sats fees)."
+          }
+      
       payment_hash = await pay_invoice(
           wallet_id=lnurluniversal.wallet,
           payment_request=pr,
@@ -409,7 +434,8 @@ async def api_withdraw_callback(
           """,
           {"payment_request": pr}
       )
-      raise HTTPException(status_code=500, detail=str(e))
+      # Return LNURL-compliant error response
+      return {"status": "ERROR", "reason": str(e)}
 
 
 # Metadata endpoint
