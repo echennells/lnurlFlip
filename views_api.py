@@ -34,6 +34,27 @@ lnurluniversal_api_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 
 
+def calculate_routing_fee_reserve(amount_sats: int) -> int:
+    """Calculate appropriate fee reserve for Lightning routing.
+    
+    Args:
+        amount_sats: The amount in satoshis to be sent
+        
+    Returns:
+        The fee reserve in satoshis
+    """
+    # For small amounts, use higher percentage due to routing challenges
+    if amount_sats <= 100:
+        # 10% for amounts <= 100 sats
+        return max(10, int(amount_sats * 0.1))
+    elif amount_sats <= 1000:
+        # 5% for amounts <= 1000 sats
+        return max(5, int(amount_sats * 0.05))
+    else:
+        # 1% for larger amounts with min 10 sats
+        return max(10, int(amount_sats * 0.01))
+
+
 #######################################
 ##### ADD YOUR API ENDPOINTS HERE #####
 #######################################
@@ -211,18 +232,17 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        ))
 
        # Calculate how much can be withdrawn (accounting for routing fees)
-       # Estimate routing fee reserve (1% + 2 sats minimum)
-       estimated_fee_sats = max(2, int(universal_balance_sats * 0.01) + 2)
+       fee_reserve = calculate_routing_fee_reserve(universal_balance_sats)
        
-       if actual_balance >= (universal_balance_sats + estimated_fee_sats):
+       if actual_balance >= (universal_balance_sats + fee_reserve):
            # Wallet has enough for full withdrawal plus fees
            max_withdrawable = universal_balance  # Already in msats
            logging.info(f"Allowing full universal balance withdrawal: {universal_balance_sats} sats (wallet has {actual_balance} sats)")
-       elif actual_balance > estimated_fee_sats + 10:  # At least 10 sats withdrawable after fees
+       elif actual_balance > fee_reserve + 10:  # At least 10 sats withdrawable after fees
            # Reduce withdrawable amount to leave room for fees
-           max_withdrawable_sats = actual_balance - estimated_fee_sats
+           max_withdrawable_sats = actual_balance - fee_reserve
            max_withdrawable = min(universal_balance, max_withdrawable_sats * 1000)  # Convert to msats
-           logging.info(f"Limiting withdrawal to {max_withdrawable_sats} sats to account for {estimated_fee_sats} sats in fees")
+           logging.info(f"Limiting withdrawal to {max_withdrawable_sats} sats to account for {fee_reserve} sats in fees")
        else:
            # Not enough in wallet to cover universal balance
            logging.info(f"Not enough in wallet ({actual_balance} sats) to cover withdrawal of {universal_balance_sats} sats")
@@ -373,24 +393,16 @@ async def api_withdraw_callback(
       wallet = await get_wallet(lnurluniversal.wallet)
       wallet_balance_sats = wallet.balance_msat // 1000
       
-      # Estimate routing fee reserve (typically 1% + 2 sats minimum)
-      fee_reserve_sats = max(2, int(amount * 0.01) + 2)
+      # Calculate routing fee reserve
+      fee_reserve = calculate_routing_fee_reserve(amount)
+      total_needed = amount + fee_reserve
       
       # Check if wallet has enough balance for withdrawal + fees
-      if wallet_balance_sats < (amount + fee_reserve_sats):
-          # Calculate maximum withdrawable amount
-          max_withdrawable = max(0, wallet_balance_sats - fee_reserve_sats)
-          
-          if max_withdrawable < 10:  # Less than 10 sats is not worth withdrawing
-              return {
-                  "status": "ERROR", 
-                  "reason": f"Insufficient balance. Wallet needs {fee_reserve_sats} sats reserved for fees."
-              }
-          
-          # Provide helpful error with maximum withdrawable amount
+      if wallet_balance_sats < total_needed:
+          # Provide helpful error message
           return {
-              "status": "ERROR",
-              "reason": f"Amount too high. Max withdrawable: {max_withdrawable} sats (after {fee_reserve_sats} sats fees)."
+              "status": "ERROR", 
+              "reason": f"Insufficient balance. Need {fee_reserve} sats for routing fees"
           }
       
       payment_hash = await pay_invoice(
@@ -434,8 +446,14 @@ async def api_withdraw_callback(
           """,
           {"payment_request": pr}
       )
-      # Return LNURL-compliant error response
-      return {"status": "ERROR", "reason": str(e)}
+      # Return LNURL-compliant error response with better error messages
+      error_msg = str(e).lower()
+      if "no route" in error_msg:
+          return {"status": "ERROR", "reason": "No payment route found. Try smaller amount."}
+      elif "insufficient" in error_msg:
+          return {"status": "ERROR", "reason": "Insufficient balance for routing fees."}
+      else:
+          return {"status": "ERROR", "reason": str(e)}
 
 
 # Metadata endpoint
