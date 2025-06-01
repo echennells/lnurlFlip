@@ -34,25 +34,25 @@ lnurluniversal_api_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 
 
-def calculate_routing_fee_reserve(amount_sats: int) -> int:
+def calculate_routing_fee_reserve(amount_msat: int) -> int:
     """Calculate appropriate fee reserve for Lightning routing.
     
     Args:
-        amount_sats: The amount in satoshis to be sent
+        amount_msat: The amount in millisatoshis to be sent
         
     Returns:
-        The fee reserve in satoshis
+        The fee reserve in millisatoshis
     """
     # For small amounts, use higher percentage due to routing challenges
-    if amount_sats <= 100:
+    if amount_msat <= 100000:  # 100 sats
         # 10% for amounts <= 100 sats
-        return max(10, int(amount_sats * 0.1))
-    elif amount_sats <= 1000:
+        return max(10000, int(amount_msat * 0.1))  # min 10 sats
+    elif amount_msat <= 1000000:  # 1000 sats
         # 5% for amounts <= 1000 sats
-        return max(5, int(amount_sats * 0.05))
+        return max(5000, int(amount_msat * 0.05))  # min 5 sats
     else:
         # 1% for larger amounts with min 10 sats
-        return max(10, int(amount_sats * 0.01))
+        return max(10000, int(amount_msat * 0.01))  # min 10 sats
 
 
 #######################################
@@ -231,18 +231,17 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        raise HTTPException(status_code=404, detail="Not found")
 
    # First check balance
-   universal_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-   universal_balance_sats = universal_balance // 1000  # Convert to sats for comparison
-   logging.info(f"Universal balance: {universal_balance} msats ({universal_balance_sats} sats)")
+   universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
+   logging.info(f"Universal balance: {universal_balance_msat} msats ({universal_balance_msat // 1000} sats)")
 
    # Check actual wallet balance
    from lnbits.core.crud import get_wallet
    wallet = await get_wallet(lnurluniversal.wallet)
-   actual_balance = wallet.balance_msat // 1000  # Convert to sats
-   logging.info(f"LNbits wallet balance: {actual_balance} sats")
+   actual_balance_msat = wallet.balance_msat
+   logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({actual_balance_msat // 1000} sats)")
 
    # If wallet balance is less than 60 sats AND no universal balance, force payment mode
-   if actual_balance < 60 and universal_balance == 0:
+   if actual_balance_msat < 60000 and universal_balance_msat == 0:
        logging.info("Wallet balance below 60 sats and no universal balance, switching to payment mode")
        lnurluniversal.state = "payment"
        await update_lnurluniversal(lnurluniversal)
@@ -276,20 +275,20 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        ))
 
        # Calculate how much can be withdrawn (accounting for routing fees)
-       fee_reserve = calculate_routing_fee_reserve(universal_balance_sats)
+       fee_reserve_msat = calculate_routing_fee_reserve(universal_balance_msat)
        
-       if actual_balance >= (universal_balance_sats + fee_reserve):
+       if actual_balance_msat >= (universal_balance_msat + fee_reserve_msat):
            # Wallet has enough for full withdrawal plus fees
-           max_withdrawable = universal_balance  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_sats} sats (wallet has {actual_balance} sats)")
-       elif actual_balance > fee_reserve + 10:  # At least 10 sats withdrawable after fees
+           max_withdrawable = universal_balance_msat  # Already in msats
+           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_msat // 1000} sats (wallet has {actual_balance_msat // 1000} sats)")
+       elif actual_balance_msat > fee_reserve_msat + 10000:  # At least 10 sats withdrawable after fees
            # Reduce withdrawable amount to leave room for fees
-           max_withdrawable_sats = actual_balance - fee_reserve
-           max_withdrawable = min(universal_balance, max_withdrawable_sats * 1000)  # Convert to msats
-           logging.info(f"Limiting withdrawal to {max_withdrawable_sats} sats to account for {fee_reserve} sats in fees")
+           max_withdrawable_msat = actual_balance_msat - fee_reserve_msat
+           max_withdrawable = min(universal_balance_msat, max_withdrawable_msat)
+           logging.info(f"Limiting withdrawal to {max_withdrawable_msat // 1000} sats to account for {fee_reserve_msat // 1000} sats in fees")
        else:
            # Not enough in wallet to cover universal balance
-           logging.info(f"Not enough in wallet ({actual_balance} sats) to cover withdrawal of {universal_balance_sats} sats")
+           logging.info(f"Not enough in wallet ({actual_balance_msat // 1000} sats) to cover withdrawal of {universal_balance_msat // 1000} sats")
            # Switch to payment mode
            lnurluniversal.state = "payment"
            await update_lnurluniversal(lnurluniversal)
@@ -414,10 +413,10 @@ async def api_withdraw_callback(
   if not lnurluniversal:
       return {"status": "ERROR", "reason": "Record not found"}
 
-  amount = decode_bolt11(pr).amount_msat // 1000  # Convert to sats
-  available_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+  amount_msat = decode_bolt11(pr).amount_msat
+  available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
 
-  if amount > available_balance:
+  if amount_msat > available_balance_msat:
       return {"status": "ERROR", "reason": "Insufficient balance for withdrawal"}
 
   withdraw_id = urlsafe_short_hash()
@@ -429,7 +428,7 @@ async def api_withdraw_callback(
       {
           "id": withdraw_id,
           "universal_id": lnurluniversal_id,
-          "amount": amount,
+          "amount": amount_msat,
           "created_time": int(time.time()),
           "payment_request": pr
       }
@@ -439,20 +438,20 @@ async def api_withdraw_callback(
       # Check wallet balance to ensure we have enough for routing fees
       from lnbits.core.crud import get_wallet
       wallet = await get_wallet(lnurluniversal.wallet)
-      wallet_balance_sats = wallet.balance_msat // 1000
+      wallet_balance_msat = wallet.balance_msat
       
-      # Calculate routing fee reserve
-      fee_reserve = calculate_routing_fee_reserve(amount)
-      total_needed = amount + fee_reserve
+      # Calculate routing fee reserve (now expects msats)
+      fee_reserve_msat = calculate_routing_fee_reserve(amount_msat)
+      total_needed_msat = amount_msat + fee_reserve_msat
       
-      logging.info(f"Withdraw attempt: amount={amount} sats, wallet_balance={wallet_balance_sats} sats, fee_reserve={fee_reserve} sats, total_needed={total_needed} sats")
+      logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat, fee_reserve={fee_reserve_msat} msat, total_needed={total_needed_msat} msat")
       
       # Check if wallet has enough balance for withdrawal + fees
-      if wallet_balance_sats < total_needed:
-          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_sats}, needed={total_needed}, universal_id={lnurluniversal_id}")
+      if wallet_balance_msat < total_needed_msat:
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, needed={total_needed_msat}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Need {fee_reserve} sats extra for Lightning fees"
+              "reason": f"Need {fee_reserve_msat // 1000} sats extra for Lightning fees"
           }
       
       payment_hash = await pay_invoice(
@@ -477,10 +476,10 @@ async def api_withdraw_callback(
           {"payment_request": pr}
       )
 
-      if amount >= lnurluniversal.total // 1000:
+      if amount_msat >= lnurluniversal.total:
           lnurluniversal.uses += 1
 
-      new_total = max(0, lnurluniversal.total - (amount * 1000))
+      new_total = max(0, lnurluniversal.total - amount_msat)
       lnurluniversal.total = new_total
       if new_total == 0:
           lnurluniversal.state = "payment"
@@ -498,7 +497,7 @@ async def api_withdraw_callback(
       )
       # Return LNURL-compliant error response with better error messages
       error_msg = str(e).lower()
-      logger.error(f"Withdrawal failed: {str(e)} universal_id={lnurluniversal_id} amount={amount}")
+      logger.error(f"Withdrawal failed: {str(e)} universal_id={lnurluniversal_id} amount_msat={amount_msat}")
       
       if "no route" in error_msg:
           return {"status": "ERROR", "reason": "No route found. Try smaller amount"}

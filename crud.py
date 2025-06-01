@@ -48,9 +48,10 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
         """,
         {"universal_id": lnurluniversal_id}
     )
-    pending_amount = pending["total"] if pending else 0
-    available_balance = max(0, universal.total - pending_amount)
-    return available_balance
+    pending_amount_msat = pending["total"] if pending else 0
+    # Note: universal.total is in msats, pending_amount_msat is now also in msats
+    available_balance_msat = max(0, universal.total - pending_amount_msat)
+    return available_balance_msat
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
     """Get a single LnurlUniversal by ID."""
