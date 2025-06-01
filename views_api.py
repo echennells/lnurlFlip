@@ -78,17 +78,18 @@ async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_
 
         return {"pay_links": formatted_links}
     except Exception as e:
-        print(f"Error in api_get_lnurlp_links: {str(e)}")
+        logger.error(f"Error in api_get_lnurlp_links: {str(e)}")
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching LNURL Pay links: {str(e)}"
+            detail="Server error"
         )
 
 @lnurluniversal_api_router.get("/api/v1/lnurluniversal/withdraw/{withdraw_id}")
 async def api_get_withdraw_link(withdraw_id: str, user: User = Depends(check_user_exists)):
     withdraw_info = await get_withdraw_link_info(withdraw_id)
     if "error" in withdraw_info:
-        raise HTTPException(status_code=404, detail=withdraw_info["error"])
+        logger.error(f"Withdraw link not found: {withdraw_id}, error: {withdraw_info['error']}")
+        raise HTTPException(status_code=404, detail="Not found")
     return withdraw_info
 
 @lnurluniversal_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
@@ -120,7 +121,8 @@ async def api_lnurluniversals(
 async def api_get_balance(lnurluniversal_id: str) -> dict:
     balance = await get_lnurluniversal_balance(lnurluniversal_id)
     if balance is None:
-        raise HTTPException(status_code=404, detail="LnurlUniversal not found")
+        logger.error(f"Balance fetch failed - universal not found: {lnurluniversal_id}")
+        raise HTTPException(status_code=404, detail="Not found")
     return {"balance": balance}
 
 @lnurluniversal_api_router.get("/api/v1/lnurl/{lnurluniversal_id}")
@@ -146,8 +148,9 @@ async def api_get_lnurl(request: Request, lnurluniversal_id: str):
 async def api_lnurluniversal(lnurluniversal_id: str):
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     if not lnurluniversal:
+        logger.error(f"LnurlUniversal not found: {lnurluniversal_id}")
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
     
     # Add balance and comment count like the list endpoint
@@ -185,7 +188,8 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    logging.info(f"Redirect request for id: {lnurluniversal_id}")
    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
    if not lnurluniversal:
-       raise HTTPException(status_code=404, detail="Record not found")
+       logger.error(f"Record not found for lnurluniversal_id: {lnurluniversal_id}")
+       raise HTTPException(status_code=404, detail="Not found")
 
    # First check balance
    universal_balance = await get_lnurluniversal_balance(lnurluniversal_id)
@@ -207,7 +211,8 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        # Handle payment case
        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
        if not pay_link:
-           raise HTTPException(status_code=404, detail="Payment link not found")
+           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
+           raise HTTPException(status_code=404, detail="Not found")
 
        callback_url = str(request.url_for(
            "lnurluniversal.api_lnurl_callback",
@@ -252,7 +257,8 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            
            pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
            if not pay_link:
-               raise HTTPException(status_code=404, detail="Payment link not found")
+               logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
+               raise HTTPException(status_code=404, detail="Not found")
 
            return {
                "tag": "payRequest",
@@ -274,7 +280,8 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        # Handle regular payment case
        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
        if not pay_link:
-           raise HTTPException(status_code=404, detail="Payment link not found")
+           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
+           raise HTTPException(status_code=404, detail="Not found")
 
        callback_url = str(request.url_for(
            "lnurluniversal.api_lnurl_callback",
@@ -301,11 +308,13 @@ async def api_lnurl_callback(
 ):
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     if not lnurluniversal:
-        raise HTTPException(status_code=404, detail="Record not found")
+        logger.error(f"Pay callback - record not found: {lnurluniversal_id}")
+        return {"status": "ERROR", "reason": "Invalid payment link"}
 
     pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
     if not pay_link:
-        raise HTTPException(status_code=404, detail="Payment link not found")
+        logger.error(f"Pay callback - payment link not found: {lnurluniversal.selectedLnurlp}")
+        return {"status": "ERROR", "reason": "Payment setup error"}
 
     if comment:
         comment_id = urlsafe_short_hash()
@@ -401,10 +410,10 @@ async def api_withdraw_callback(
       
       # Check if wallet has enough balance for withdrawal + fees
       if wallet_balance_sats < total_needed:
-          # Provide helpful error message
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_sats}, needed={total_needed}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Insufficient balance. Need {fee_reserve} sats for routing fees"
+              "reason": f"Need {fee_reserve} sats extra for Lightning fees"
           }
       
       payment_hash = await pay_invoice(
@@ -450,12 +459,18 @@ async def api_withdraw_callback(
       )
       # Return LNURL-compliant error response with better error messages
       error_msg = str(e).lower()
+      logger.error(f"Withdrawal failed: {str(e)} universal_id={lnurluniversal_id} amount={amount}")
+      
       if "no route" in error_msg:
-          return {"status": "ERROR", "reason": "No payment route found. Try smaller amount."}
+          return {"status": "ERROR", "reason": "No route found. Try smaller amount"}
       elif "insufficient" in error_msg:
-          return {"status": "ERROR", "reason": "Insufficient balance for routing fees."}
+          return {"status": "ERROR", "reason": "Lightning fees too high. Try 100+ sats"}
+      elif "timeout" in error_msg:
+          return {"status": "ERROR", "reason": "Payment timed out. Try again"}
       else:
-          return {"status": "ERROR", "reason": str(e)}
+          # Log full error but return simple message
+          logger.error(f"Unexpected withdrawal error: {str(e)}")
+          return {"status": "ERROR", "reason": "Payment failed. Try again"}
 
 
 # Metadata endpoint
@@ -494,14 +509,15 @@ async def api_lnurluniversal_update(
 ) -> LnurlUniversal:
     if not lnurluniversal_id:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     assert lnurluniversal, "LnurlUniversal couldn't be retrieved"
 
     if wallet.wallet.id != lnurluniversal.wallet:
+        logger.warning(f"Unauthorized access attempt to universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
         raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Not your LnurlUniversal."
+            status_code=HTTPStatus.FORBIDDEN, detail="Forbidden"
         )
 
     # Update only the fields that exist in the new model
@@ -550,7 +566,7 @@ async def api_lnurluniversal_create(
         return fetched_lnurluniversal
     except Exception as e:
         logger.error(f"Error creating LnurlUniversal: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error creating LnurlUniversal: {str(e)}")
+        raise HTTPException(status_code=500, detail="Server error")
 
 
 ## Delete a record
@@ -561,13 +577,15 @@ async def api_lnurluniversal_delete(
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
 
     if not lnurluniversal:
+        logger.error(f"Delete failed - LnurlUniversal not found: {lnurluniversal_id}")
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
 
     if lnurluniversal.wallet != wallet.wallet.id:
+        logger.warning(f"Unauthorized delete attempt on universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
         raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Not your LnurlUniversal."
+            status_code=HTTPStatus.FORBIDDEN, detail="Forbidden"
         )
 
     await delete_lnurluniversal(lnurluniversal_id)
@@ -588,8 +606,9 @@ async def api_lnurluniversal_create_invoice(
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
 
     if not lnurluniversal:
+        logger.error(f"Payment invoice creation failed - LnurlUniversal not found: {lnurluniversal_id}")
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
 
     # we create a payment and add some tags,
@@ -606,8 +625,9 @@ async def api_lnurluniversal_create_invoice(
             },
         )
     except Exception as exc:
+        logger.error(f"Payment creation failed for universal_id: {lnurluniversal_id}, error: {str(exc)}")
         raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail=str(exc)
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Payment creation failed"
         ) from exc
 
     return {"payment_hash": payment.payment_hash, "payment_request": payment.bolt11}
@@ -619,7 +639,8 @@ async def api_get_comments(
     """Get comments for a universal"""
     universal = await get_lnurluniversal(universal_id)
     if not universal:
-        raise HTTPException(status_code=404, detail="Universal not found")
+        logger.error(f"Comments fetch - universal not found: {universal_id}")
+        raise HTTPException(status_code=404, detail="Not found")
 
     comments = await get_universal_comments(universal_id)
     return comments
