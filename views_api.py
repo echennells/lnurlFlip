@@ -34,6 +34,30 @@ lnurluniversal_api_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 
 
+def is_valid_state_transition(current_state: str, new_state: str) -> bool:
+    """Validate if a state transition is allowed.
+    
+    Args:
+        current_state: The current state of the universal
+        new_state: The proposed new state
+        
+    Returns:
+        True if the transition is valid, False otherwise
+    """
+    # Define valid state transitions
+    valid_transitions = {
+        "payment": ["withdraw"],  # Can go from payment to withdraw
+        "withdraw": ["payment"],  # Can go from withdraw to payment
+    }
+    
+    # Same state is always valid (no-op)
+    if current_state == new_state:
+        return True
+        
+    # Check if transition is in our valid transitions map
+    return new_state in valid_transitions.get(current_state, [])
+
+
 def calculate_routing_fee_reserve(amount_msat: int) -> int:
     """Calculate appropriate fee reserve for Lightning routing.
     
@@ -244,8 +268,9 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    # If wallet balance is less than 60 sats AND no universal balance, force payment mode
    if actual_balance_msat < 60000 and universal_balance_msat == 0:
        logging.info("Wallet balance below 60 sats and no universal balance, switching to payment mode")
-       lnurluniversal.state = "payment"
-       await update_lnurluniversal(lnurluniversal)
+       if lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
+           lnurluniversal.state = "payment"
+           await update_lnurluniversal(lnurluniversal)
        
        # Handle payment case
        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
@@ -291,8 +316,9 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            # Not enough in wallet to cover universal balance
            logging.info(f"Not enough in wallet ({actual_balance_msat // 1000} sats) to cover withdrawal of {universal_balance_msat // 1000} sats")
            # Switch to payment mode
-           lnurluniversal.state = "payment"
-           await update_lnurluniversal(lnurluniversal)
+           if lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
+               lnurluniversal.state = "payment"
+               await update_lnurluniversal(lnurluniversal)
            
            pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
            if not pay_link:
@@ -482,7 +508,7 @@ async def api_withdraw_callback(
 
       new_total = max(0, lnurluniversal.total - amount_msat)
       lnurluniversal.total = new_total
-      if new_total == 0:
+      if new_total == 0 and lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
           lnurluniversal.state = "payment"
       await update_lnurluniversal(lnurluniversal)
 
