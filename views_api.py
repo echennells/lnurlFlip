@@ -108,7 +108,7 @@ async def api_lnurluniversals(
     for record in records:
         # Get comment count for each record
         comment_count = await db.fetchone(
-            "SELECT COUNT(*) as count FROM invoice_comments WHERE universal_id = :universal_id",
+            "SELECT COUNT(*) as count FROM lnurluniversal.invoice_comments WHERE universal_id = :universal_id",
             {"universal_id": record.id}
         )
         data = record.dict()
@@ -423,7 +423,7 @@ async def api_withdraw_callback(
   withdraw_id = urlsafe_short_hash()
   await db.execute(
       """
-      INSERT INTO pending_withdrawals (id, universal_id, amount, created_time, payment_request)
+      INSERT INTO lnurluniversal.pending_withdrawals (id, universal_id, amount, created_time, payment_request)
       VALUES (:id, :universal_id, :amount, :created_time, :payment_request)
       """,
       {
@@ -470,7 +470,7 @@ async def api_withdraw_callback(
 
       await db.execute(
           """
-          UPDATE pending_withdrawals
+          UPDATE lnurluniversal.pending_withdrawals
           SET status = 'completed'
           WHERE payment_request = :payment_request
           """,
@@ -490,7 +490,7 @@ async def api_withdraw_callback(
   except Exception as e:
       await db.execute(
           """
-          UPDATE pending_withdrawals
+          UPDATE lnurluniversal.pending_withdrawals
           SET status = 'failed'
           WHERE payment_request = :payment_request
           """,
