@@ -344,7 +344,7 @@ async def api_lnurl_callback(
         "pr": payment.bolt11,
         "successAction": {
             "tag": "message",
-            "message": f"Payment received. Current balance: {current_balance / 1000} sats"
+            "message": "Payment received"
         },
         "routes": [],
         "balance": current_balance  # Add this line to include the balance in the response
@@ -364,13 +364,13 @@ async def api_withdraw_callback(
 ):
   lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
   if not lnurluniversal:
-      raise HTTPException(status_code=404, detail="Record not found")
+      return {"status": "ERROR", "reason": "Record not found"}
 
   amount = decode_bolt11(pr).amount_msat // 1000  # Convert to sats
   available_balance = await get_lnurluniversal_balance(lnurluniversal_id)
 
   if amount > available_balance:
-      raise HTTPException(status_code=400, detail="Insufficient balance for withdrawal")
+      return {"status": "ERROR", "reason": "Insufficient balance for withdrawal"}
 
   withdraw_id = urlsafe_short_hash()
   await db.execute(
@@ -396,6 +396,8 @@ async def api_withdraw_callback(
       # Calculate routing fee reserve
       fee_reserve = calculate_routing_fee_reserve(amount)
       total_needed = amount + fee_reserve
+      
+      logging.info(f"Withdraw attempt: amount={amount} sats, wallet_balance={wallet_balance_sats} sats, fee_reserve={fee_reserve} sats, total_needed={total_needed} sats")
       
       # Check if wallet has enough balance for withdrawal + fees
       if wallet_balance_sats < total_needed:
