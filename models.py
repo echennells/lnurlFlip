@@ -13,16 +13,6 @@ class CreateLnurlUniversalData(BaseModel):
     selectedLnurlw: str
     state: str = "payment"
 
-#class LnurlUniversal(BaseModel):
-#    id: str
-#    wallet: str
-#    lnurlpayamount: int
-#    name: str
-#    lnurlwithdrawamount: int
-#    total: int
-#    lnurlpay: Optional[str]
-#    lnurlwithdraw: Optional[str]
-
 
 class LnurlUniversal(BaseModel):
     id: str

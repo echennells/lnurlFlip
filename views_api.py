@@ -5,7 +5,7 @@ from lnbits.core.crud import get_user
 from lnbits.core.models import User
 from lnbits.decorators import WalletTypeInfo, check_user_exists
 from lnbits.core.services import create_invoice, pay_invoice
-from lnbits.extensions.lnurlp.crud import get_pay_links, get_pay_link
+from lnbits.extensions.lnurlp.crud import get_pay_link
 from lnbits.bolt11 import decode as decode_bolt11
 from loguru import logger
 from typing import Optional
@@ -64,6 +64,7 @@ def calculate_routing_fee_reserve(amount_msat: int) -> int:
 @lnurluniversal_api_router.get("/api/v1/myex/lnurlp_links")
 async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_key)):
     try:
+        from lnbits.extensions.lnurlp.crud import get_pay_links
         pay_links = await get_pay_links(wallet_ids=[wallet.wallet.id])
 
         formatted_links = [
@@ -510,34 +511,6 @@ async def api_withdraw_callback(
           logger.error(f"Unexpected withdrawal error: {str(e)}")
           return {"status": "ERROR", "reason": "Payment failed. Try again"}
 
-
-# Metadata endpoint
-@lnurluniversal_api_router.get("/api/v1/lnurl/{lnurluniversal_id}")
-async def api_lnurl_response(request: Request, lnurluniversal_id: str):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        raise HTTPException(status_code=404, detail="Record not found")
-
-    if lnurluniversal.state == "payment":
-        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
-        if not pay_link:
-            raise HTTPException(status_code=404, detail="Payment link not found")
-
-        # Generate callback URL for this endpoint
-        callback_url = str(request.url_for(
-            "lnurluniversal.api_lnurl_callback",
-            lnurluniversal_id=lnurluniversal_id
-        ))
-
-        # Return metadata format like LNURLP
-        return {
-            "callback": callback_url,
-            "maxSendable": pay_link.max * 1000,
-            "minSendable": pay_link.min * 1000,
-            "metadata": pay_link.lnurlpay_metadata,
-            "tag": "payRequest",
-            "commentAllowed": pay_link.comment_chars if pay_link.comment_chars > 0 else None
-        }
 
 @lnurluniversal_api_router.put("/api/v1/myex/{lnurluniversal_id}")
 async def api_lnurluniversal_update(
