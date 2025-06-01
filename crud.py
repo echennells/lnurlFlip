@@ -87,9 +87,14 @@ async def get_lnurluniversals(wallet_ids: Union[str, List[str]]) -> List[LnurlUn
         placeholders.append(f":{key}")
         values[key] = wallet_id
     
-    q = ",".join(placeholders)
+    # Use a static query structure to prevent SQL injection
+    if not placeholders:
+        return []
+    
+    query = "SELECT * FROM lnurluniversal.maintable WHERE wallet IN (" + ",".join(placeholders) + ")"
+    
     rows = await db.fetchall(
-        f"SELECT * FROM lnurluniversal.maintable WHERE wallet IN ({q})",
+        query,
         values,
         LnurlUniversal
     )
