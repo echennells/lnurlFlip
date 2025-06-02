@@ -67,16 +67,22 @@ def calculate_routing_fee_reserve(amount_msat: int) -> int:
     Returns:
         The fee reserve in millisatoshis
     """
-    # For small amounts, use higher percentage due to routing challenges
-    if amount_msat <= 100000:  # 100 sats
-        # 10% for amounts <= 100 sats
-        return max(10000, int(amount_msat * 0.1))  # min 10 sats
+    # More reasonable fee structure with lower percentages
+    if amount_msat <= 10000:  # 10 sats
+        # 3 sats flat fee for very small amounts
+        return 3000  # 3 sats
+    elif amount_msat <= 100000:  # 100 sats
+        # 3% for amounts <= 100 sats, min 3 sats
+        return max(3000, int(amount_msat * 0.03))
     elif amount_msat <= 1000000:  # 1000 sats
-        # 5% for amounts <= 1000 sats
-        return max(5000, int(amount_msat * 0.05))  # min 5 sats
+        # 2% for amounts <= 1000 sats, min 5 sats
+        return max(5000, int(amount_msat * 0.02))
+    elif amount_msat <= 10000000:  # 10,000 sats
+        # 1% for amounts <= 10,000 sats, min 10 sats
+        return max(10000, int(amount_msat * 0.01))
     else:
-        # 1% for larger amounts with min 10 sats
-        return max(10000, int(amount_msat * 0.01))  # min 10 sats
+        # 0.5% for larger amounts with min 50 sats, max 500 sats
+        return min(500000, max(50000, int(amount_msat * 0.005)))
 
 
 #######################################
