@@ -25,7 +25,7 @@ from .crud import (
     db
 )
 from .models import CreateLnurlUniversalData, LnurlUniversal
-from .utils import get_withdraw_link_info
+from .utils import get_withdraw_link_info, check_universal_access
 import time
 import logging
 
@@ -147,19 +147,8 @@ async def api_get_balance(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    # Verify the universal belongs to the requesting wallet
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
-        logger.error(f"Balance fetch failed - universal not found: {lnurluniversal_id}")
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    # Check authorization
-    if universal.wallet != wallet.wallet.id:
-        # Check if user has access to this wallet
-        user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
-            logger.warning(f"Unauthorized balance access attempt for universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Use centralized authorization check
+    universal = await check_universal_access(lnurluniversal_id, wallet)
     
     balance = await get_lnurluniversal_balance(lnurluniversal_id)
     return {"balance": balance}
@@ -170,16 +159,8 @@ async def api_get_lnurl(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    # Verify the universal belongs to the requesting wallet
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    # Check authorization
-    if universal.wallet != wallet.wallet.id:
-        user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Use centralized authorization check
+    universal = await check_universal_access(lnurluniversal_id, wallet)
     
     # Just construct the URL directly
     base_url = str(request.base_url).rstrip('/')
@@ -197,15 +178,13 @@ async def api_get_lnurl(
 @lnurluniversal_api_router.get(
     "/api/v1/myex/{lnurluniversal_id}",
     status_code=HTTPStatus.OK,
-    dependencies=[Depends(require_invoice_key)],
 )
-async def api_lnurluniversal(lnurluniversal_id: str):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        logger.error(f"LnurlUniversal not found: {lnurluniversal_id}")
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
-        )
+async def api_lnurluniversal(
+    lnurluniversal_id: str,
+    wallet: WalletTypeInfo = Depends(require_invoice_key)
+):
+    # Use centralized authorization check
+    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
     
     # Add balance and comment count like the list endpoint
     balance = await get_lnurluniversal_balance(lnurluniversal_id)
@@ -225,15 +204,8 @@ async def api_get_qr_data(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        raise HTTPException(status_code=404, detail="Record not found")
-    
-    # Check authorization
-    if lnurluniversal.wallet != wallet.wallet.id:
-        user = await get_user(wallet.wallet.user)
-        if not user or lnurluniversal.wallet not in user.wallet_ids:
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Use centralized authorization check
+    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
 
     # Generate the URL to our redirect endpoint
     redirect_url = str(request.url_for(
@@ -548,14 +520,10 @@ async def api_lnurluniversal_update(
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    assert lnurluniversal, "LnurlUniversal couldn't be retrieved"
-
-    if wallet.wallet.id != lnurluniversal.wallet:
-        logger.warning(f"Unauthorized access attempt to universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Forbidden"
-        )
+    
+    # Use centralized authorization check with direct ownership requirement
+    # Admin operations (UPDATE) require direct wallet ownership
+    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet, require_direct_ownership=True)
 
     # Update only the fields that exist in the new model
     lnurluniversal.name = data.name
@@ -611,19 +579,9 @@ async def api_lnurluniversal_create(
 async def api_lnurluniversal_delete(
     lnurluniversal_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-
-    if not lnurluniversal:
-        logger.error(f"Delete failed - LnurlUniversal not found: {lnurluniversal_id}")
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
-        )
-
-    if lnurluniversal.wallet != wallet.wallet.id:
-        logger.warning(f"Unauthorized delete attempt on universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN, detail="Forbidden"
-        )
+    # Use centralized authorization check with direct ownership requirement
+    # Admin operations (UPDATE) require direct wallet ownership
+    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet, require_direct_ownership=True)
 
     await delete_lnurluniversal(lnurluniversal_id)
     return "", HTTPStatus.NO_CONTENT
@@ -643,20 +601,8 @@ async def api_lnurluniversal_create_invoice(
     memo: str = "",
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-
-    if not lnurluniversal:
-        logger.error(f"Payment invoice creation failed - LnurlUniversal not found: {lnurluniversal_id}")
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Not found"
-        )
-    
-    # Check authorization
-    if lnurluniversal.wallet != wallet.wallet.id:
-        user = await get_user(wallet.wallet.user)
-        if not user or lnurluniversal.wallet not in user.wallet_ids:
-            logger.warning(f"Unauthorized payment creation attempt for universal_id: {lnurluniversal_id} by wallet: {wallet.wallet.id}")
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Use centralized authorization check
+    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
 
     # we create a payment and add some tags,
     # so tasks.py can grab the payment once its paid
@@ -685,18 +631,8 @@ async def api_get_comments(
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> list[dict]:
     """Get comments for a universal"""
-    universal = await get_lnurluniversal(universal_id)
-    if not universal:
-        logger.error(f"Comments fetch - universal not found: {universal_id}")
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    # Check authorization
-    if universal.wallet != wallet.wallet.id:
-        # Check if user has access to this wallet
-        user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
-            logger.warning(f"Unauthorized comments access attempt for universal_id: {universal_id} by wallet: {wallet.wallet.id}")
-            raise HTTPException(status_code=403, detail="Forbidden")
+    # Use centralized authorization check
+    universal = await check_universal_access(universal_id, wallet)
 
     comments = await get_universal_comments(universal_id)
     return comments
