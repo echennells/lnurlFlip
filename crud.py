@@ -120,6 +120,67 @@ async def delete_lnurluniversal(lnurluniversal_id: str) -> None:
         {"id": lnurluniversal_id}
     )
 
+async def update_lnurluniversal_atomic(
+    lnurluniversal_id: str, 
+    amount_delta: int,
+    increment_uses: bool = False
+) -> Optional[LnurlUniversal]:
+    """
+    Atomically update the balance and optionally increment uses.
+    This prevents race conditions by doing the math in the database.
+    
+    Args:
+        lnurluniversal_id: The ID of the universal to update
+        amount_delta: The amount to add (positive) or subtract (negative)
+        increment_uses: Whether to increment the uses counter
+    
+    Returns:
+        The updated LnurlUniversal object or None if not found
+    """
+    logger.info(f"Atomic update for {lnurluniversal_id}: delta={amount_delta}, increment_uses={increment_uses}")
+    
+    # First do the atomic update
+    uses_increment = ", uses = uses + 1" if increment_uses else ""
+    
+    # Handle different database types
+    if db.type == "SQLITE":
+        # SQLite uses MAX instead of GREATEST
+        await db.execute(
+            f"""
+            UPDATE lnurluniversal.maintable
+            SET total = MAX(0, total + :amount_delta){uses_increment}
+            WHERE id = :id
+            """,
+            {"id": lnurluniversal_id, "amount_delta": amount_delta}
+        )
+    else:
+        # PostgreSQL and CockroachDB use GREATEST
+        await db.execute(
+            f"""
+            UPDATE lnurluniversal.maintable
+            SET total = GREATEST(0, total + :amount_delta){uses_increment}
+            WHERE id = :id
+            """,
+            {"id": lnurluniversal_id, "amount_delta": amount_delta}
+        )
+    
+    # Now update the state based on the new total
+    universal = await get_lnurluniversal(lnurluniversal_id)
+    if universal:
+        new_state = "withdraw" if universal.total > 0 else "payment"
+        if universal.state != new_state:
+            await db.execute(
+                """
+                UPDATE lnurluniversal.maintable
+                SET state = :state
+                WHERE id = :id
+                """,
+                {"id": lnurluniversal_id, "state": new_state}
+            )
+            universal.state = new_state
+    
+    return universal
+
 async def get_universal_comments(universal_id: str) -> List[dict]:
     """Get all comments for a universal"""
     rows = await db.fetchall(
