@@ -227,7 +227,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        logger.error(f"Record not found for lnurluniversal_id: {lnurluniversal_id}")
        raise HTTPException(status_code=404, detail="Not found")
 
-   # First check balance
+   # First check balance (all balances in msats for consistency)
    universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
    logging.info(f"Universal balance: {universal_balance_msat} msats ({universal_balance_msat // 1000} sats)")
 
@@ -273,7 +273,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        ))
 
        # Calculate how much can be withdrawn (accounting for routing fees)
-       fee_reserve_msat = calculate_routing_fee_reserve(universal_balance_msat)
+       fee_reserve_msat = calculate_routing_fee_reserve(universal_balance_msat)  # Both params in msats
        
        if actual_balance_msat >= (universal_balance_msat + fee_reserve_msat):
            # Wallet has enough for full withdrawal plus fees
@@ -366,13 +366,13 @@ async def api_lnurl_callback(
                 "universal_id": lnurluniversal_id,
                 "comment": comment,
                 "timestamp": int(time.time()),
-                "amount": amount
+                "amount": amount  # Amount in msats from LNURL
             }
         )
 
     payment = await create_invoice(
         wallet_id=pay_link.wallet,
-        amount=int(amount / 1000),
+        amount=int(amount / 1000),  # Convert from msats to sats for invoice creation
         memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
         extra={
             "tag": "ext_lnurluniversal",
@@ -412,8 +412,8 @@ async def api_withdraw_callback(
   if not lnurluniversal:
       return {"status": "ERROR", "reason": "Record not found"}
 
-  amount_msat = decode_bolt11(pr).amount_msat
-  available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
+  amount_msat = decode_bolt11(pr).amount_msat  # Amount from invoice in msats
+  available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)  # Balance in msats
 
   if amount_msat > available_balance_msat:
       return {"status": "ERROR", "reason": "Insufficient balance for withdrawal"}
@@ -427,7 +427,7 @@ async def api_withdraw_callback(
       {
           "id": withdraw_id,
           "universal_id": lnurluniversal_id,
-          "amount": amount_msat,
+          "amount": amount_msat,  # Store amount in msats
           "created_time": int(time.time()),
           "payment_request": pr
       }
@@ -597,7 +597,7 @@ async def api_lnurluniversal_delete(
 )
 async def api_lnurluniversal_create_invoice(
     lnurluniversal_id: str, 
-    amount: int = Query(..., ge=1), 
+    amount: int = Query(..., ge=1),  # Amount in sats
     memo: str = "",
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
@@ -610,7 +610,7 @@ async def api_lnurluniversal_create_invoice(
     try:
         payment = await create_invoice(
             wallet_id=lnurluniversal.wallet,
-            amount=amount,
+            amount=amount,  # Already in sats, no conversion needed
             memo=f"{memo} to {lnurluniversal.name}" if memo else f"{lnurluniversal.name}",
             extra={
                 "tag": "lnurluniversal",

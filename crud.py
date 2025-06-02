@@ -33,7 +33,11 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     return await get_lnurluniversal(data.id)
 
 async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
-    """Get the balance from record and subtract pending withdrawals"""
+    """Get the balance from record and subtract pending withdrawals
+    
+    Returns:
+        The available balance in millisatoshis (msats)
+    """
     universal = await get_lnurluniversal(lnurluniversal_id)
     if not universal:
         return None
@@ -131,7 +135,7 @@ async def update_lnurluniversal_atomic(
     
     Args:
         lnurluniversal_id: The ID of the universal to update
-        amount_delta: The amount to add (positive) or subtract (negative)
+        amount_delta: The amount in msats to add (positive) or subtract (negative)
         increment_uses: Whether to increment the uses counter
     
     Returns:
