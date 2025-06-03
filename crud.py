@@ -83,19 +83,23 @@ async def get_lnurluniversals(wallet_ids: Union[str, List[str]]) -> List[LnurlUn
     if isinstance(wallet_ids, str):
         wallet_ids = [wallet_ids]
     
+    # Validate input
+    if not wallet_ids:
+        return []
+    
     # Build query with proper placeholders
     placeholders = []
     values = {}
     for i, wallet_id in enumerate(wallet_ids):
+        # Ensure wallet_id is a string to prevent injection
+        if not isinstance(wallet_id, str):
+            raise ValueError(f"Invalid wallet_id type: {type(wallet_id)}")
         key = f"wallet_{i}"
         placeholders.append(f":{key}")
         values[key] = wallet_id
     
-    # Use a static query structure to prevent SQL injection
-    if not placeholders:
-        return []
-    
-    query = "SELECT * FROM lnurluniversal.maintable WHERE wallet IN (" + ",".join(placeholders) + ")"
+    # Use parameterized query with individually named placeholders
+    query = f"SELECT * FROM lnurluniversal.maintable WHERE wallet IN ({','.join(placeholders)})"
     
     rows = await db.fetchall(
         query,
