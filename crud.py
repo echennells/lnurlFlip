@@ -197,3 +197,77 @@ async def get_universal_comments(universal_id: str) -> List[dict]:
         {"universal_id": universal_id}
     )
     return [dict(row) for row in rows]
+
+async def update_state_if_condition(
+    lnurluniversal_id: str,
+    new_state: str,
+    condition: str = None
+) -> bool:
+    """
+    Atomically update the state if a condition is met.
+    This prevents race conditions in state transitions.
+    
+    Args:
+        lnurluniversal_id: The ID of the universal to update
+        new_state: The new state to set
+        condition: SQL condition to check (e.g., "state = 'payment' AND total = 0")
+    
+    Returns:
+        True if the state was updated, False otherwise
+    """
+    if condition:
+        query = f"""
+        UPDATE lnurluniversal.maintable
+        SET state = :new_state
+        WHERE id = :id AND ({condition})
+        """
+    else:
+        query = """
+        UPDATE lnurluniversal.maintable
+        SET state = :new_state
+        WHERE id = :id
+        """
+    
+    result = await db.execute(
+        query,
+        {"id": lnurluniversal_id, "new_state": new_state}
+    )
+    
+    # Check if any rows were updated
+    return result and hasattr(result, 'rowcount') and result.rowcount > 0
+
+async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[str] = None) -> bool:
+    """
+    Check if a lnurluniversal with the given name already exists for the wallet.
+    
+    Args:
+        name: The name to check
+        wallet_id: The wallet ID to check within
+        exclude_id: Optional ID to exclude from the check (for updates)
+    
+    Returns:
+        True if a duplicate exists, False otherwise
+    """
+    if exclude_id:
+        result = await db.fetchone(
+            """
+            SELECT COUNT(*) as count
+            FROM lnurluniversal.maintable
+            WHERE LOWER(name) = LOWER(:name) 
+            AND wallet = :wallet_id
+            AND id != :exclude_id
+            """,
+            {"name": name, "wallet_id": wallet_id, "exclude_id": exclude_id}
+        )
+    else:
+        result = await db.fetchone(
+            """
+            SELECT COUNT(*) as count
+            FROM lnurluniversal.maintable
+            WHERE LOWER(name) = LOWER(:name) 
+            AND wallet = :wallet_id
+            """,
+            {"name": name, "wallet_id": wallet_id}
+        )
+    
+    return result["count"] > 0 if result else False

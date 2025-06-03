@@ -20,8 +20,11 @@ from .crud import (
     get_lnurluniversal,
     get_lnurluniversals,
     update_lnurluniversal,
+    update_lnurluniversal_atomic,
+    update_state_if_condition,
     get_lnurluniversal_balance,
     get_universal_comments,
+    check_duplicate_name,
     db
 )
 from .models import CreateLnurlUniversalData, LnurlUniversal
@@ -67,22 +70,22 @@ def calculate_routing_fee_reserve(amount_msat: int) -> int:
     Returns:
         The fee reserve in millisatoshis
     """
-    # More reasonable fee structure with lower percentages
-    if amount_msat <= 10000:  # 10 sats
-        # 3 sats flat fee for very small amounts
-        return 3000  # 3 sats
+    # More conservative fee structure for better routing success
+    if amount_msat <= 50000:  # 50 sats
+        # 10 sats flat fee for very small amounts (50 sats or less)
+        return 10000  # 10 sats
     elif amount_msat <= 100000:  # 100 sats
-        # 3% for amounts <= 100 sats, min 3 sats
-        return max(3000, int(amount_msat * 0.03))
+        # 10% for amounts <= 100 sats, min 10 sats
+        return max(10000, round(amount_msat * 0.10))
     elif amount_msat <= 1000000:  # 1000 sats
-        # 2% for amounts <= 1000 sats, min 5 sats
-        return max(5000, int(amount_msat * 0.02))
+        # 5% for amounts <= 1000 sats, min 10 sats
+        return max(10000, round(amount_msat * 0.05))
     elif amount_msat <= 10000000:  # 10,000 sats
-        # 1% for amounts <= 10,000 sats, min 10 sats
-        return max(10000, int(amount_msat * 0.01))
+        # 2% for amounts <= 10,000 sats, min 20 sats
+        return max(20000, round(amount_msat * 0.02))
     else:
-        # 0.5% for larger amounts with min 50 sats, max 500 sats
-        return min(500000, max(50000, int(amount_msat * 0.005)))
+        # 1% for larger amounts with min 50 sats, max 500 sats
+        return min(500000, max(50000, round(amount_msat * 0.01)))
 
 
 #######################################
@@ -246,9 +249,12 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    # If wallet balance is less than 60 sats AND no universal balance, force payment mode
    if actual_balance_msat < 60000 and universal_balance_msat == 0:
        logging.info("Wallet balance below 60 sats and no universal balance, switching to payment mode")
-       if lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
-           lnurluniversal.state = "payment"
-           await update_lnurluniversal(lnurluniversal)
+       # Use atomic state update to prevent race conditions
+       await update_state_if_condition(
+           lnurluniversal_id,
+           "payment",
+           "state != 'payment'"
+       )
        
        # Handle payment case
        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
@@ -285,7 +291,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            # Wallet has enough for full withdrawal plus fees
            max_withdrawable = universal_balance_msat  # Already in msats
            logging.info(f"Allowing full universal balance withdrawal: {universal_balance_msat // 1000} sats (wallet has {actual_balance_msat // 1000} sats)")
-       elif actual_balance_msat > fee_reserve_msat + 10000:  # At least 10 sats withdrawable after fees
+       elif actual_balance_msat > fee_reserve_msat + 50000:  # At least 50 sats withdrawable after fees
            # Reduce withdrawable amount to leave room for fees
            max_withdrawable_msat = actual_balance_msat - fee_reserve_msat
            max_withdrawable = min(universal_balance_msat, max_withdrawable_msat)
@@ -293,10 +299,12 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        else:
            # Not enough in wallet to cover universal balance
            logging.info(f"Not enough in wallet ({actual_balance_msat // 1000} sats) to cover withdrawal of {universal_balance_msat // 1000} sats")
-           # Switch to payment mode
-           if lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
-               lnurluniversal.state = "payment"
-               await update_lnurluniversal(lnurluniversal)
+           # Use atomic state update to prevent race conditions
+           await update_state_if_condition(
+               lnurluniversal_id,
+               "payment",
+               "state != 'payment'"
+           )
            
            pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
            if not pay_link:
@@ -315,7 +323,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            "tag": "withdrawRequest",
            "callback": callback_url,
            "k1": urlsafe_short_hash(),
-           "minWithdrawable": 1000,  # 1 sat minimum
+           "minWithdrawable": 50000,  # 50 sat minimum
            "maxWithdrawable": max_withdrawable,
            "defaultDescription": f"Withdraw from {lnurluniversal.name}"
        }
@@ -378,7 +386,7 @@ async def api_lnurl_callback(
 
     payment = await create_invoice(
         wallet_id=pay_link.wallet,
-        amount=int(amount / 1000),  # Convert from msats to sats for invoice creation
+        amount=amount // 1000,  # Convert from msats to sats for invoice creation
         memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
         extra={
             "tag": "ext_lnurluniversal",
@@ -481,14 +489,13 @@ async def api_withdraw_callback(
           {"payment_request": pr}
       )
 
-      if amount_msat >= lnurluniversal.total:
-          lnurluniversal.uses += 1
-
-      new_total = max(0, lnurluniversal.total - amount_msat)
-      lnurluniversal.total = new_total
-      if new_total == 0 and lnurluniversal.state != "payment" and is_valid_state_transition(lnurluniversal.state, "payment"):
-          lnurluniversal.state = "payment"
-      await update_lnurluniversal(lnurluniversal)
+      # Use atomic update to prevent race conditions
+      increment_uses = amount_msat >= lnurluniversal.total
+      updated_universal = await update_lnurluniversal_atomic(
+          lnurluniversal_id,
+          -amount_msat,  # Negative because we're withdrawing
+          increment_uses=increment_uses
+      )
 
       return {"status": "OK"}
   except Exception as e:
@@ -531,6 +538,14 @@ async def api_lnurluniversal_update(
     # Admin operations (UPDATE) require direct wallet ownership
     lnurluniversal = await check_universal_access(lnurluniversal_id, wallet, require_direct_ownership=True)
 
+    # Check for duplicate name if the name is being changed
+    if lnurluniversal.name != data.name:
+        if await check_duplicate_name(data.name, lnurluniversal.wallet, exclude_id=lnurluniversal_id):
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=f"A lnurluniversal with the name '{data.name}' already exists in this wallet"
+            )
+
     # Update only the fields that exist in the new model
     lnurluniversal.name = data.name
     lnurluniversal.lnurlwithdrawamount = data.lnurlwithdrawamount
@@ -548,36 +563,39 @@ async def api_lnurluniversal_create(
     data: CreateLnurlUniversalData,
     key_type: WalletTypeInfo = Depends(require_admin_key),
 ) -> LnurlUniversal:
-    try:
-        lnurluniversal_id = urlsafe_short_hash()
-        logger.info(f"Generated lnurluniversal_id: {lnurluniversal_id}")
-
-        data.wallet = data.wallet or key_type.wallet.id
-        myext = LnurlUniversal(
-            id=lnurluniversal_id,
-            name=data.name,
-            wallet=data.wallet,
-            lnurlwithdrawamount=data.lnurlwithdrawamount,
-            selectedLnurlp=data.selectedLnurlp,
-            selectedLnurlw=data.selectedLnurlw,
-            state="payment",  # Always initialize state to "payment"
-            total=0,  # Initialize total to 0
-            uses=0    # Initialize uses to 0
+    data.wallet = data.wallet or key_type.wallet.id
+    
+    # Check for duplicate name
+    if await check_duplicate_name(data.name, data.wallet):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"A lnurluniversal with the name '{data.name}' already exists in this wallet"
         )
+    
+    lnurluniversal_id = urlsafe_short_hash()
+    logger.info(f"Generated lnurluniversal_id: {lnurluniversal_id}")
+    myext = LnurlUniversal(
+        id=lnurluniversal_id,
+        name=data.name,
+        wallet=data.wallet,
+        lnurlwithdrawamount=data.lnurlwithdrawamount,
+        selectedLnurlp=data.selectedLnurlp,
+        selectedLnurlw=data.selectedLnurlw,
+        state="payment",  # Always initialize state to "payment"
+        total=0,  # Initialize total to 0
+        uses=0    # Initialize uses to 0
+    )
 
-        logger.info(f"Creating LnurlUniversal with data: {myext}")
+    logger.info(f"Creating LnurlUniversal with data: {myext}")
 
-        created_lnurluniversal = await create_lnurluniversal(myext)
-        logger.info(f"Created LnurlUniversal: {created_lnurluniversal}")
-        
-        # Fetch the created LnurlUniversal to ensure all fields are populated
-        fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
-        logger.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
-        
-        return fetched_lnurluniversal
-    except Exception as e:
-        logger.error(f"Error creating LnurlUniversal: {str(e)}")
-        raise HTTPException(status_code=500, detail="Server error")
+    created_lnurluniversal = await create_lnurluniversal(myext)
+    logger.info(f"Created LnurlUniversal: {created_lnurluniversal}")
+    
+    # Fetch the created LnurlUniversal to ensure all fields are populated
+    fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
+    logger.info(f"Fetched LnurlUniversal after creation: {fetched_lnurluniversal}")
+    
+    return fetched_lnurluniversal
 
 
 ## Delete a record
