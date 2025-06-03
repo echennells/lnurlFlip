@@ -1,6 +1,5 @@
 from typing import Optional, Union, List
 from lnbits.db import Database
-from lnbits.helpers import urlsafe_short_hash
 from .models import LnurlUniversal, CreateLnurlUniversalData
 from fastapi import HTTPException
 from loguru import logger

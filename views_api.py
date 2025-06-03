@@ -9,7 +9,6 @@ from lnbits.extensions.lnurlp.crud import get_pay_link
 from lnbits.bolt11 import decode as decode_bolt11
 from loguru import logger
 from typing import Optional
-import shortuuid
 from lnbits.decorators import require_admin_key, require_invoice_key
 from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
