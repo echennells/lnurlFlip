@@ -5,6 +5,7 @@ from lnbits.core.crud import get_user
 from lnbits.core.models import User
 from lnbits.decorators import WalletTypeInfo, check_user_exists
 from lnbits.core.services import create_invoice, pay_invoice
+from lnbits.core.crud import get_wallet
 from lnbits.extensions.lnurlp.crud import get_pay_link
 from lnbits.bolt11 import decode as decode_bolt11
 from loguru import logger
@@ -24,8 +25,11 @@ from .crud import (
     get_lnurluniversal_balance,
     get_universal_comments,
     check_duplicate_name,
+    process_payment_with_lock,
+    validate_state_transition,
     db
 )
+from .utils import validate_msat_amount, validate_sat_amount, sats_to_msats, msats_to_sats
 from .models import CreateLnurlUniversalData, LnurlUniversal
 from .utils import get_withdraw_link_info, check_universal_access
 import time
@@ -36,28 +40,6 @@ lnurluniversal_api_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 
 
-def is_valid_state_transition(current_state: str, new_state: str) -> bool:
-    """Validate if a state transition is allowed.
-    
-    Args:
-        current_state: The current state of the universal
-        new_state: The proposed new state
-        
-    Returns:
-        True if the transition is valid, False otherwise
-    """
-    # Define valid state transitions
-    valid_transitions = {
-        "payment": ["withdraw"],  # Can go from payment to withdraw
-        "withdraw": ["payment"],  # Can go from withdraw to payment
-    }
-    
-    # Same state is always valid (no-op)
-    if current_state == new_state:
-        return True
-        
-    # Check if transition is in our valid transitions map
-    return new_state in valid_transitions.get(current_state, [])
 
 
 def calculate_routing_fee_reserve(amount_msat: int) -> int:
@@ -206,24 +188,6 @@ async def api_lnurluniversal(
     data['comment_count'] = comment_count['count'] if comment_count else 0
     return data
 
-@lnurluniversal_api_router.get("/api/v1/qr/{lnurluniversal_id}")
-async def api_get_qr_data(
-    request: Request, 
-    lnurluniversal_id: str,
-    wallet: WalletTypeInfo = Depends(require_invoice_key)
-):
-    # Use centralized authorization check
-    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
-
-    # Generate the URL to our redirect endpoint
-    redirect_url = str(request.url_for(
-        "lnurluniversal.api_lnurluniversal_redirect",
-        lnurluniversal_id=lnurluniversal_id
-    ))
-
-    # Encode it as LNURL and add lightning: prefix
-    encoded_url = "lightning:" + lnurl_encode(redirect_url)
-    return Response(content=encoded_url, media_type="text/plain")
 
 
 
@@ -284,20 +248,22 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        ))
 
        # Calculate how much can be withdrawn (accounting for routing fees)
-       fee_reserve_msat = calculate_routing_fee_reserve(universal_balance_msat)  # Both params in msats
+       max_withdrawable = universal_balance_msat
        
-       if actual_balance_msat >= (universal_balance_msat + fee_reserve_msat):
-           # Wallet has enough for full withdrawal plus fees
-           max_withdrawable = universal_balance_msat  # Already in msats
-           logging.info(f"Allowing full universal balance withdrawal: {universal_balance_msat // 1000} sats (wallet has {actual_balance_msat // 1000} sats)")
-       elif actual_balance_msat > fee_reserve_msat + 50000:  # At least 50 sats withdrawable after fees
-           # Reduce withdrawable amount to leave room for fees
-           max_withdrawable_msat = actual_balance_msat - fee_reserve_msat
-           max_withdrawable = min(universal_balance_msat, max_withdrawable_msat)
-           logging.info(f"Limiting withdrawal to {max_withdrawable_msat // 1000} sats to account for {fee_reserve_msat // 1000} sats in fees")
-       else:
-           # Not enough in wallet to cover universal balance
-           logging.info(f"Not enough in wallet ({actual_balance_msat // 1000} sats) to cover withdrawal of {universal_balance_msat // 1000} sats")
+       # Ensure we always leave at least 10 sats for fees (per the error message requirement)
+       min_fee_reserve = 10000  # 10 sats minimum
+       
+       # If universal balance would use entire wallet, reduce it to leave fee reserve
+       if max_withdrawable >= actual_balance_msat - min_fee_reserve:
+           max_withdrawable = max(0, actual_balance_msat - min_fee_reserve)
+           logging.info(f"Limiting withdrawal to {max_withdrawable // 1000} sats to ensure {min_fee_reserve // 1000} sats fee reserve")
+       
+       # Ensure max_withdrawable doesn't exceed universal balance
+       max_withdrawable = min(max_withdrawable, universal_balance_msat)
+       
+       # If we can't withdraw at least 50 sats, switch to payment mode
+       if max_withdrawable < 50000:  # Less than 50 sats withdrawable
+           logging.info(f"Not enough withdrawable balance ({max_withdrawable // 1000} sats), switching to payment mode")
            # Use atomic state update to prevent race conditions
            await update_state_if_condition(
                lnurluniversal_id,
@@ -365,48 +331,91 @@ async def api_lnurl_callback(
     if not pay_link:
         logger.error(f"Pay callback - payment link not found: {lnurluniversal.selectedLnurlp}")
         return {"status": "ERROR", "reason": "Payment setup error"}
+    
+    # Add wallet comparison logging
+    logger.info(f"Wallet comparison - Universal wallet: {lnurluniversal.wallet}, PayLink wallet: {pay_link.wallet}")
+    logger.info(f"Universal ID: {lnurluniversal_id}, PayLink ID: {pay_link.id}")
+    
+    # Validate that the wallet exists
+    wallet = await get_wallet(pay_link.wallet)
+    if not wallet:
+        logger.error(f"Wallet not found: {pay_link.wallet}")
+        return {"status": "ERROR", "reason": "Wallet configuration error"}
+    logger.info(f"Wallet found - ID: {wallet.id}, Name: {wallet.name}, Balance: {wallet.balance_msat} msats")
+    
+    # Check funding source
+    from lnbits.wallets import get_funding_source
+    funding_source = get_funding_source()
+    logger.info(f"Funding source: {type(funding_source).__name__}")
 
     if comment:
         comment_id = urlsafe_short_hash()
         await db.execute(
             """
             INSERT INTO lnurluniversal.invoice_comments 
-            (id, universal_id, comment, timestamp, amount)
-            VALUES (:id, :universal_id, :comment, :timestamp, :amount)
+            (id, universal_id, comment, timestamp, amount_msat)
+            VALUES (:id, :universal_id, :comment, :timestamp, :amount_msat)
             """,
             {
                 "id": comment_id,
                 "universal_id": lnurluniversal_id,
                 "comment": comment,
                 "timestamp": int(time.time()),
-                "amount": amount  # Amount in msats from LNURL
+                "amount_msat": amount  # Amount in msats from LNURL
             }
         )
 
-    payment = await create_invoice(
-        wallet_id=pay_link.wallet,
-        amount=amount // 1000,  # Convert from msats to sats for invoice creation
-        memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
-        extra={
-            "tag": "ext_lnurluniversal",
-            "universal_id": lnurluniversal_id,
-            "selectedLnurlp": lnurluniversal.selectedLnurlp,
-            "link": pay_link.id,
-            "comment": comment if comment else None
-        }
-    )
+    # Log invoice creation details
+    logger.info(f"Creating invoice - Amount requested: {amount} msats ({amount // 1000} sats)")
+    logger.info(f"Invoice wallet: {pay_link.wallet}")
+    logger.info(f"Invoice memo: {pay_link.description}{' - ' + comment if comment else ''}")
+    
+    try:
+        payment = await create_invoice(
+            wallet_id=pay_link.wallet,
+            amount=amount // 1000,  # Convert from msats to sats for invoice creation
+            memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
+            extra={
+                "tag": "ext_lnurluniversal",
+                "universal_id": lnurluniversal_id,
+                "selectedLnurlp": lnurluniversal.selectedLnurlp,
+                "link": pay_link.id,
+                "comment": comment if comment else None
+            }
+        )
+        
+        if not payment or not payment.bolt11:
+            logger.error(f"Invoice creation failed - no payment object returned")
+            return {"status": "ERROR", "reason": "Failed to create invoice"}
+            
+    except Exception as e:
+        logger.error(f"Exception creating invoice: {str(e)}")
+        return {"status": "ERROR", "reason": f"Invoice creation error: {str(e)}"}
 
     # Do not update balance here - it will be updated when payment is confirmed in tasks.py
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    
+    logger.info(f"Created invoice for universal {lnurluniversal_id}: payment_hash={payment.payment_hash}, amount={amount // 1000} sats")
+    logger.info(f"Invoice extra data: {payment.extra}")
+    
+    # Decode and log invoice details for debugging
+    try:
+        decoded = decode_bolt11(payment.bolt11)
+        logger.info(f"Decoded invoice - Amount: {decoded.amount_msat} msats, Description: {decoded.description}")
+        logger.info(f"Invoice payment_hash: {decoded.payment_hash}")
+        logger.info(f"Invoice payee: {decoded.payee if hasattr(decoded, 'payee') else 'Not specified'}")
+        logger.info(f"Invoice expiry: {decoded.expiry} seconds")
+        logger.info(f"Full bolt11 invoice: {payment.bolt11}")
+    except Exception as e:
+        logger.error(f"Failed to decode created invoice: {str(e)}")
 
     return {
         "pr": payment.bolt11,
         "successAction": {
             "tag": "message",
-            "message": "Payment received"
+            "message": "Payment received!"
         },
-        "routes": [],
-        "balance": current_balance  # Add this line to include the balance in the response
+        "routes": []
     }
 
 
@@ -434,13 +443,13 @@ async def api_withdraw_callback(
   withdraw_id = urlsafe_short_hash()
   await db.execute(
       """
-      INSERT INTO lnurluniversal.pending_withdrawals (id, universal_id, amount, created_time, payment_request)
-      VALUES (:id, :universal_id, :amount, :created_time, :payment_request)
+      INSERT INTO lnurluniversal.pending_withdrawals (id, universal_id, amount_msat, created_time, payment_request)
+      VALUES (:id, :universal_id, :amount_msat, :created_time, :payment_request)
       """,
       {
           "id": withdraw_id,
           "universal_id": lnurluniversal_id,
-          "amount": amount_msat,  # Store amount in msats
+          "amount_msat": amount_msat,  # Store amount in msats
           "created_time": int(time.time()),
           "payment_request": pr
       }
@@ -458,12 +467,15 @@ async def api_withdraw_callback(
       
       logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat, fee_reserve={fee_reserve_msat} msat, total_needed={total_needed_msat} msat")
       
-      # Check if wallet has enough balance for withdrawal + fees
-      if wallet_balance_msat < total_needed_msat:
-          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, needed={total_needed_msat}, universal_id={lnurluniversal_id}")
+      # The system requires at least 10 sats reserved for fees
+      min_required_reserve = 10000  # 10 sats as per the error message
+      
+      # Check if wallet has enough balance for withdrawal while leaving fee reserve
+      if wallet_balance_msat < amount_msat + min_required_reserve:
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, required_reserve={min_required_reserve}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Need {fee_reserve_msat // 1000} sats extra for Lightning fees"
+              "reason": f"Insufficient balance. Need at least {min_required_reserve // 1000} sats reserved for fees"
           }
       
       payment_hash = await pay_invoice(
@@ -488,12 +500,13 @@ async def api_withdraw_callback(
           {"payment_request": pr}
       )
 
-      # Use atomic update to prevent race conditions
-      increment_uses = amount_msat >= lnurluniversal.total
-      updated_universal = await update_lnurluniversal_atomic(
+      # Use locked payment processing to prevent race conditions
+      increment_uses = amount_msat >= lnurluniversal.total_msat
+      updated_universal = await process_payment_with_lock(
           lnurluniversal_id,
           -amount_msat,  # Negative because we're withdrawing
-          increment_uses=increment_uses
+          increment_uses=increment_uses,
+          operation_type="withdrawal"
       )
 
       return {"status": "OK"}
@@ -547,7 +560,7 @@ async def api_lnurluniversal_update(
 
     # Update only the fields that exist in the new model
     lnurluniversal.name = data.name
-    lnurluniversal.lnurlwithdrawamount = data.lnurlwithdrawamount
+    lnurluniversal.lnurlwithdrawamount_sat = data.lnurlwithdrawamount_sat
     lnurluniversal.selectedLnurlp = data.selectedLnurlp
     lnurluniversal.selectedLnurlw = data.selectedLnurlw
 
@@ -577,11 +590,11 @@ async def api_lnurluniversal_create(
         id=lnurluniversal_id,
         name=data.name,
         wallet=data.wallet,
-        lnurlwithdrawamount=data.lnurlwithdrawamount,
+        lnurlwithdrawamount_sat=data.lnurlwithdrawamount_sat,
         selectedLnurlp=data.selectedLnurlp,
         selectedLnurlw=data.selectedLnurlw,
         state="payment",  # Always initialize state to "payment"
-        total=0,  # Initialize total to 0
+        total_msat=0,  # Initialize total to 0
         uses=0    # Initialize uses to 0
     )
 

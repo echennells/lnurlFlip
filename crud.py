@@ -3,15 +3,19 @@ from lnbits.db import Database
 from .models import LnurlUniversal, CreateLnurlUniversalData
 from fastapi import HTTPException
 from loguru import logger
+import asyncio
 
 db = Database("ext_lnurluniversal")
 
+# Lock manager for payment operations to prevent race conditions
+payment_locks = {}
+
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     """Create a new LnurlUniversal record."""
-    # Ensure fields are initialized
-    data.total = 0
+    # Ensure fields are initialized with valid values
+    data.total_msat = 0
     data.uses = 0
-    data.state = "payment"
+    data.state = "payment"  # Always start in payment state when balance is 0
     
     try:
         # Log the data being inserted
@@ -44,7 +48,7 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
     # Get pending withdrawals
     pending = await db.fetchone(
         """
-        SELECT COALESCE(SUM(amount), 0) as total
+        SELECT COALESCE(SUM(amount_msat), 0) as total
         FROM lnurluniversal.pending_withdrawals
         WHERE universal_id = :universal_id
         AND status = 'pending'
@@ -52,8 +56,8 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
         {"universal_id": lnurluniversal_id}
     )
     pending_amount_msat = pending["total"] if pending else 0
-    # Note: universal.total is in msats, pending_amount_msat is now also in msats
-    available_balance_msat = max(0, universal.total - pending_amount_msat)
+    # Note: universal.total_msat is in msats, pending_amount_msat is now also in msats
+    available_balance_msat = max(0, universal.total_msat - pending_amount_msat)
     return available_balance_msat
 
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
@@ -146,16 +150,22 @@ async def update_lnurluniversal_atomic(
     """
     logger.info(f"Atomic update for {lnurluniversal_id}: delta={amount_delta}, increment_uses={increment_uses}")
     
-    # First do the atomic update
+    # Calculate new state based on amount_delta
+    # For positive delta (payment), state should be "withdraw" after update
+    # For negative delta (withdrawal), state depends on remaining balance
     uses_increment = ", uses = uses + 1" if increment_uses else ""
     
-    # Handle different database types
+    # Handle different database types with atomic state update
     if db.type == "SQLITE":
         # SQLite uses MAX instead of GREATEST
         await db.execute(
             f"""
             UPDATE lnurluniversal.maintable
-            SET total = MAX(0, total + :amount_delta){uses_increment}
+            SET total_msat = MAX(0, total_msat + :amount_delta){uses_increment},
+                state = CASE 
+                    WHEN MAX(0, total_msat + :amount_delta) > 0 THEN 'withdraw'
+                    ELSE 'payment'
+                END
             WHERE id = :id
             """,
             {"id": lnurluniversal_id, "amount_delta": amount_delta}
@@ -165,28 +175,18 @@ async def update_lnurluniversal_atomic(
         await db.execute(
             f"""
             UPDATE lnurluniversal.maintable
-            SET total = GREATEST(0, total + :amount_delta){uses_increment}
+            SET total_msat = GREATEST(0, total_msat + :amount_delta){uses_increment},
+                state = CASE 
+                    WHEN GREATEST(0, total_msat + :amount_delta) > 0 THEN 'withdraw'
+                    ELSE 'payment'
+                END
             WHERE id = :id
             """,
             {"id": lnurluniversal_id, "amount_delta": amount_delta}
         )
     
-    # Now update the state based on the new total
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if universal:
-        new_state = "withdraw" if universal.total > 0 else "payment"
-        if universal.state != new_state:
-            await db.execute(
-                """
-                UPDATE lnurluniversal.maintable
-                SET state = :state
-                WHERE id = :id
-                """,
-                {"id": lnurluniversal_id, "state": new_state}
-            )
-            universal.state = new_state
-    
-    return universal
+    # Return the updated record
+    return await get_lnurluniversal(lnurluniversal_id)
 
 async def get_universal_comments(universal_id: str) -> List[dict]:
     """Get all comments for a universal"""
@@ -207,17 +207,31 @@ async def update_state_if_condition(
     condition: str = None
 ) -> bool:
     """
-    Atomically update the state if a condition is met.
+    Atomically update the state if a condition is met and the transition is valid.
     This prevents race conditions in state transitions.
     
     Args:
         lnurluniversal_id: The ID of the universal to update
         new_state: The new state to set
-        condition: SQL condition to check (e.g., "state = 'payment' AND total = 0")
+        condition: SQL condition to check (e.g., "state = 'payment' AND total_msat = 0")
     
     Returns:
         True if the state was updated, False otherwise
     """
+    # First check if this is a valid state transition
+    current = await get_lnurluniversal(lnurluniversal_id)
+    if not current:
+        return False
+    
+    # Validate the state transition
+    if not validate_state_transition(current.state, new_state):
+        logger.warning(f"Invalid state transition attempted: {current.state} -> {new_state}")
+        return False
+    
+    # If the states are the same, no update needed
+    if current.state == new_state:
+        return True
+    
     if condition:
         query = f"""
         UPDATE lnurluniversal.maintable
@@ -274,3 +288,84 @@ async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[s
         )
     
     return result["count"] > 0 if result else False
+
+async def process_payment_with_lock(
+    lnurluniversal_id: str,
+    amount_delta: int,
+    increment_uses: bool = False,
+    operation_type: str = "payment"
+) -> Optional[LnurlUniversal]:
+    """
+    Process payment operations with proper locking to prevent race conditions.
+    This ensures that concurrent operations on the same universal are serialized.
+    
+    Args:
+        lnurluniversal_id: The ID of the universal to update
+        amount_delta: The amount in msats to add (positive) or subtract (negative)
+        increment_uses: Whether to increment the uses counter
+        operation_type: Type of operation ("payment" or "withdrawal")
+    
+    Returns:
+        The updated LnurlUniversal object or None if not found
+    """
+    # Get or create a lock for this universal
+    if lnurluniversal_id not in payment_locks:
+        payment_locks[lnurluniversal_id] = asyncio.Lock()
+    
+    lock = payment_locks[lnurluniversal_id]
+    
+    try:
+        # Use the lock to ensure atomic operations
+        async with lock:
+            logger.info(f"Acquired lock for {lnurluniversal_id}, processing {operation_type} with delta {amount_delta}")
+            
+            # For withdrawals, check balance first
+            if amount_delta < 0:  # Withdrawal
+                current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+                if current_balance < abs(amount_delta):
+                    logger.error(f"Insufficient balance for withdrawal: {current_balance} < {abs(amount_delta)}")
+                    raise HTTPException(status_code=400, detail="Insufficient balance")
+            
+            # Perform the atomic update
+            result = await update_lnurluniversal_atomic(
+                lnurluniversal_id=lnurluniversal_id,
+                amount_delta=amount_delta,
+                increment_uses=increment_uses
+            )
+            
+            logger.info(f"Released lock for {lnurluniversal_id}, operation completed")
+            return result
+    finally:
+        # Clean up lock if no longer needed (optional - helps with memory)
+        # Only clean up if there are many locks and this one is not in use
+        if len(payment_locks) > 100:  # Arbitrary threshold
+            try:
+                if not lock.locked():
+                    payment_locks.pop(lnurluniversal_id, None)
+            except:
+                pass  # Ignore any cleanup errors
+
+def validate_state_transition(current_state: str, new_state: str) -> bool:
+    """
+    Validate if a state transition is allowed.
+    This is a pure function that can be used anywhere state transitions occur.
+    
+    Args:
+        current_state: The current state of the universal
+        new_state: The proposed new state
+        
+    Returns:
+        True if the transition is valid, False otherwise
+    """
+    # Define valid state transitions
+    valid_transitions = {
+        "payment": ["withdraw"],  # Can go from payment to withdraw
+        "withdraw": ["payment"],  # Can go from withdraw to payment
+    }
+    
+    # Same state is always valid (no-op)
+    if current_state == new_state:
+        return True
+        
+    # Check if transition is in our valid transitions map
+    return new_state in valid_transitions.get(current_state, [])

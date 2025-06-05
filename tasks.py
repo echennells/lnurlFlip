@@ -7,7 +7,7 @@ from lnbits.helpers import get_current_extension_name
 from lnbits.tasks import register_invoice_listener
 from loguru import logger
 
-from .crud import get_lnurluniversal, update_lnurluniversal, update_lnurluniversal_atomic
+from .crud import get_lnurluniversal, update_lnurluniversal, update_lnurluniversal_atomic, process_payment_with_lock
 
 #######################################
 ########## RUN YOUR TASKS HERE ########
@@ -18,7 +18,7 @@ from .crud import get_lnurluniversal, update_lnurluniversal, update_lnurlunivers
 
 async def wait_for_paid_invoices():
     invoice_queue = asyncio.Queue()
-    extension_name = get_current_extension_name()
+    extension_name = "ext_lnurluniversal"
     logger.warning(f"Starting invoice listener for extension: {extension_name}")  # Changed to warning for visibility
     
     register_invoice_listener(invoice_queue, extension_name)
@@ -43,7 +43,9 @@ async def on_invoice_paid(payment: Payment) -> None:
     logger.info("-------- PAYMENT PROCESSING START --------")
     logger.info(f"Processing payment in on_invoice_paid: {payment}")
     logger.info(f"Payment extra data: {payment.extra}")
-    logger.info(f"Payment amount: {payment.amount}")
+    logger.info(f"Payment amount: {payment.amount} sats ({payment.amount * 1000} msats)")
+    logger.info(f"Payment tag: {payment.extra.get('tag') if payment.extra else 'No tag'}")
+    logger.info(f"Payment hash: {payment.payment_hash}")
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")
@@ -59,22 +61,26 @@ async def on_invoice_paid(payment: Payment) -> None:
     # Check if this is a withdrawal
     is_withdrawal = payment.extra.get('lnurlwithdraw', False)
     logger.info(f"Is withdrawal: {is_withdrawal}")
+    logger.info(f"Payment wallet_id: {payment.wallet_id}")
+    logger.info(f"Payment status: {payment.status}")
+    logger.info(f"Payment pending: {payment.pending}")
 
     # Calculate amount delta based on payment type
-    amount = abs(payment.amount)  # Convert to positive first
+    # payment.amount is in satoshis, convert to millisatoshis
+    amount_msat = abs(payment.amount) * 1000  # Convert sats to msats
     if is_withdrawal:
-        amount_delta = -amount  # Make negative for withdrawals
-        logger.info(f"This is a withdrawal. Amount delta: {amount_delta}")
+        amount_delta = -amount_msat  # Make negative for withdrawals
+        logger.info(f"This is a withdrawal. Amount delta: {amount_delta} msats")
     else:
         # For incoming payments, amount is positive
-        amount_delta = amount
-        logger.info(f"This is an incoming payment. Amount delta: {amount_delta}")
+        amount_delta = amount_msat
+        logger.info(f"This is an incoming payment. Amount delta: {amount_delta} msats")
         
         # Check if the total has already been updated for incoming payments
         # This prevents double-processing
         current = await get_lnurluniversal(lnurluniversal_id)
-        if current and current.total >= amount:
-            logger.info(f"Total already updated. Current total: {current.total}, Amount: {amount}")
+        if current and current.total_msat >= amount_msat:
+            logger.info(f"Total already updated. Current total: {current.total_msat} msats, Amount: {amount_msat} msats")
             return
 
     # Determine if we need to increment uses
@@ -82,19 +88,21 @@ async def on_invoice_paid(payment: Payment) -> None:
     increment_uses = False
     if is_withdrawal:
         current = await get_lnurluniversal(lnurluniversal_id)
-        if current and current.total + amount_delta == 0:
+        if current and current.total_msat + amount_delta == 0:
             increment_uses = True
             logger.info("This withdrawal will bring balance to 0, incrementing uses")
 
-    # Perform atomic update
-    updated = await update_lnurluniversal_atomic(
+    # Perform locked payment processing to prevent race conditions
+    operation_type = "withdrawal" if is_withdrawal else "payment"
+    updated = await process_payment_with_lock(
         lnurluniversal_id=lnurluniversal_id,
         amount_delta=amount_delta,
-        increment_uses=increment_uses
+        increment_uses=increment_uses,
+        operation_type=operation_type
     )
 
     if updated:
-        logger.info(f"After atomic update - total: {updated.total}, state: {updated.state}, uses: {getattr(updated, 'uses', 0)}")
+        logger.info(f"After atomic update - total: {updated.total_msat}, state: {updated.state}, uses: {getattr(updated, 'uses', 0)}")
     else:
         logger.error(f"Failed to update universal {lnurluniversal_id}")
     logger.info("-------- PAYMENT PROCESSING END --------")

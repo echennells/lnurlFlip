@@ -13,9 +13,9 @@ async def m001_initial(db):
             id TEXT PRIMARY KEY,
             wallet TEXT NOT NULL,
             name TEXT NOT NULL,
-            total INTEGER DEFAULT 0,
+            total_msat INTEGER DEFAULT 0,
             lnurlpayamount INTEGER DEFAULT 0,
-            lnurlwithdrawamount INTEGER DEFAULT 0,
+            lnurlwithdrawamount_sat INTEGER DEFAULT 0,
             lnurlwithdraw TEXT,
             lnurlpay TEXT
         );
@@ -47,7 +47,7 @@ async def m002_update_schema(db):
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             wallet TEXT NOT NULL,
-            lnurlwithdrawamount INTEGER,
+            lnurlwithdrawamount_sat INTEGER,
             selectedLnurlp TEXT NOT NULL,
             selectedLnurlw TEXT NOT NULL
         );
@@ -57,12 +57,12 @@ async def m002_update_schema(db):
     # Restore the backed up data with default values for new fields
     await db.execute(
         """
-        INSERT INTO lnurluniversal.maintable (id, name, wallet, lnurlwithdrawamount, selectedLnurlp, selectedLnurlw)
+        INSERT INTO lnurluniversal.maintable (id, name, wallet, lnurlwithdrawamount_sat, selectedLnurlp, selectedLnurlw)
         SELECT
             id,
             name,
             wallet,
-            NULL as lnurlwithdrawamount,
+            NULL as lnurlwithdrawamount_sat,
             '' as selectedLnurlp,
             '' as selectedLnurlw
         FROM lnurluniversal_backup;
@@ -90,7 +90,7 @@ async def m004_add_total(db):
     await db.execute(
         """
         ALTER TABLE lnurluniversal.maintable
-        ADD COLUMN total INTEGER NOT NULL DEFAULT 0;
+        ADD COLUMN total_msat INTEGER NOT NULL DEFAULT 0;
         """
     )
 
@@ -104,7 +104,7 @@ async def m005_add_pending_withdrawals(db):
         CREATE TABLE IF NOT EXISTS lnurluniversal.pending_withdrawals (
             id TEXT PRIMARY KEY,
             universal_id TEXT NOT NULL,
-            amount INTEGER NOT NULL,
+            amount_msat INTEGER NOT NULL,
             status TEXT DEFAULT 'pending',
             created_time INTEGER NOT NULL,
             payment_request TEXT NOT NULL,
@@ -135,7 +135,7 @@ async def m008_add_comments(db):
             universal_id TEXT NOT NULL,
             comment TEXT NOT NULL,
             timestamp INTEGER NOT NULL,
-            amount INTEGER NOT NULL,
+            amount_msat INTEGER NOT NULL,
             FOREIGN KEY (universal_id) REFERENCES maintable(id)
         );
         """

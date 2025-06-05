@@ -8,6 +8,35 @@ from .crud import get_lnurluniversal
 from .models import LnurlUniversal
 
 
+# Unit conversion and validation helpers
+def validate_msat_amount(amount: int, field_name: str = "amount") -> int:
+    """Validate that an amount is a valid millisatoshi value."""
+    if not isinstance(amount, int):
+        raise ValueError(f"{field_name} must be an integer (millisatoshis)")
+    if amount < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+    return amount
+
+
+def validate_sat_amount(amount: int, field_name: str = "amount") -> int:
+    """Validate that an amount is a valid satoshi value."""
+    if not isinstance(amount, int):
+        raise ValueError(f"{field_name} must be an integer (satoshis)")
+    if amount < 0:
+        raise ValueError(f"{field_name} cannot be negative")
+    return amount
+
+
+def sats_to_msats(sats: int) -> int:
+    """Convert satoshis to millisatoshis."""
+    return validate_sat_amount(sats, "sats") * 1000
+
+
+def msats_to_sats(msats: int) -> int:
+    """Convert millisatoshis to satoshis (rounds down)."""
+    return validate_msat_amount(msats, "msats") // 1000
+
+
 async def check_universal_access(
     universal_id: str, 
     wallet: WalletTypeInfo,
