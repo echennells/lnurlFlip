@@ -40,6 +40,22 @@ lnurluniversal_api_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 
 
+async def create_payment_response(request: Request, lnurluniversal_id: str, pay_link) -> dict:
+    """Create a standardized LNURL payment response."""
+    callback_url = str(request.url_for(
+        "lnurluniversal.api_lnurl_callback",
+        lnurluniversal_id=lnurluniversal_id
+    ))
+    
+    return {
+        "tag": "payRequest",
+        "callback": callback_url,
+        "minSendable": pay_link.min * 1000,
+        "maxSendable": pay_link.max * 1000,
+        "metadata": f'[["text/plain", "{pay_link.description}"]]'
+    }
+
+
 
 
 def calculate_routing_fee_reserve(amount_msat: int) -> int:
@@ -199,7 +215,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        logger.error(f"Record not found for lnurluniversal_id: {lnurluniversal_id}")
        raise HTTPException(status_code=404, detail="Not found")
 
-   # First check balance (all balances in msats for consistency)
+   # Get balance information (all balances in msats for consistency)
    universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
    logging.info(f"Universal balance: {universal_balance_msat} msats ({universal_balance_msat // 1000} sats)")
 
@@ -209,51 +225,20 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    actual_balance_msat = wallet.balance_msat
    logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({actual_balance_msat // 1000} sats)")
 
-   # If wallet balance is less than 60 sats AND no universal balance, force payment mode
+   # Determine the appropriate mode based on balances and current state
+   should_use_payment_mode = False
+   state_change_reason = None
+   
+   # Check if we should force payment mode
    if actual_balance_msat < 60000 and universal_balance_msat == 0:
-       logging.info("Wallet balance below 60 sats and no universal balance, switching to payment mode")
-       # Use atomic state update to prevent race conditions
-       await update_state_if_condition(
-           lnurluniversal_id,
-           "payment",
-           "state != 'payment'"
-       )
-       
-       # Handle payment case
-       pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
-       if not pay_link:
-           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
-           raise HTTPException(status_code=404, detail="Not found")
-
-       callback_url = str(request.url_for(
-           "lnurluniversal.api_lnurl_callback",
-           lnurluniversal_id=lnurluniversal_id
-       ))
-
-       return {
-           "tag": "payRequest",
-           "callback": callback_url,
-           "minSendable": pay_link.min * 1000,
-           "maxSendable": pay_link.max * 1000,
-           "metadata": f'[["text/plain", "{pay_link.description}"]]'
-       }
-
-   # Continue with normal state handling
-   if lnurluniversal.state == "withdraw":
-       logging.info("Processing withdraw request")
-       
-       callback_url = str(request.url_for(
-           "lnurluniversal.api_withdraw_callback",
-           lnurluniversal_id=lnurluniversal_id
-       ))
-
-       # Calculate how much can be withdrawn (accounting for routing fees)
+       should_use_payment_mode = True
+       state_change_reason = "Wallet balance below 60 sats and no universal balance"
+   elif lnurluniversal.state == "withdraw":
+       # Calculate withdrawable amount for withdraw mode
+       min_fee_reserve = 10000  # 10 sats minimum fee reserve
        max_withdrawable = universal_balance_msat
        
-       # Ensure we always leave at least 10 sats for fees (per the error message requirement)
-       min_fee_reserve = 10000  # 10 sats minimum
-       
-       # If universal balance would use entire wallet, reduce it to leave fee reserve
+       # Limit withdrawal to ensure fee reserve
        if max_withdrawable >= actual_balance_msat - min_fee_reserve:
            max_withdrawable = max(0, actual_balance_msat - min_fee_reserve)
            logging.info(f"Limiting withdrawal to {max_withdrawable // 1000} sats to ensure {min_fee_reserve // 1000} sats fee reserve")
@@ -261,29 +246,43 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        # Ensure max_withdrawable doesn't exceed universal balance
        max_withdrawable = min(max_withdrawable, universal_balance_msat)
        
-       # If we can't withdraw at least 50 sats, switch to payment mode
+       # Switch to payment mode if insufficient withdrawable balance
        if max_withdrawable < 50000:  # Less than 50 sats withdrawable
-           logging.info(f"Not enough withdrawable balance ({max_withdrawable // 1000} sats), switching to payment mode")
-           # Use atomic state update to prevent race conditions
-           await update_state_if_condition(
-               lnurluniversal_id,
-               "payment",
-               "state != 'payment'"
-           )
-           
-           pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
-           if not pay_link:
-               logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
-               raise HTTPException(status_code=404, detail="Not found")
-
-           return {
-               "tag": "payRequest",
-               "callback": callback_url,
-               "minSendable": pay_link.min * 1000,
-               "maxSendable": pay_link.max * 1000,
-               "metadata": f'[["text/plain", "{pay_link.description}"]]'
-           }
-
+           should_use_payment_mode = True
+           state_change_reason = f"Not enough withdrawable balance ({max_withdrawable // 1000} sats)"
+   
+   # Update state if needed (single decision point)
+   if should_use_payment_mode and state_change_reason:
+       logging.info(f"{state_change_reason}, switching to payment mode")
+       await update_state_if_condition(
+           lnurluniversal_id,
+           "payment",
+           "state != 'payment'"
+       )
+   
+   # Generate appropriate response based on final mode
+   if should_use_payment_mode or lnurluniversal.state == "payment":
+       # Payment mode response
+       pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
+       if not pay_link:
+           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
+           raise HTTPException(status_code=404, detail="Not found")
+       
+       return await create_payment_response(request, lnurluniversal_id, pay_link)
+   else:
+       # Withdraw mode response
+       logging.info("Processing withdraw request")
+       
+       callback_url = str(request.url_for(
+           "lnurluniversal.api_withdraw_callback",
+           lnurluniversal_id=lnurluniversal_id
+       ))
+       
+       # max_withdrawable was already calculated above if in withdraw state
+       if 'max_withdrawable' not in locals():
+           # This shouldn't happen, but handle edge case
+           max_withdrawable = universal_balance_msat
+       
        return {
            "tag": "withdrawRequest",
            "callback": callback_url,
@@ -291,25 +290,6 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            "minWithdrawable": 50000,  # 50 sat minimum
            "maxWithdrawable": max_withdrawable,
            "defaultDescription": f"Withdraw from {lnurluniversal.name}"
-       }
-   else:
-       # Handle regular payment case
-       pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
-       if not pay_link:
-           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
-           raise HTTPException(status_code=404, detail="Not found")
-
-       callback_url = str(request.url_for(
-           "lnurluniversal.api_lnurl_callback",
-           lnurluniversal_id=lnurluniversal_id
-       ))
-
-       return {
-           "tag": "payRequest",
-           "callback": callback_url,
-           "minSendable": pay_link.min * 1000,
-           "maxSendable": pay_link.max * 1000,
-           "metadata": f'[["text/plain", "{pay_link.description}"]]'
        }
 
 @lnurluniversal_api_router.get(
