@@ -15,7 +15,8 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     # Ensure fields are initialized with valid values
     data.total_msat = 0
     data.uses = 0
-    data.state = "payment"  # Always start in payment state when balance is 0
+    # State logic: payment mode when balance is 0, withdraw mode when balance > 0
+    data.state = "withdraw" if data.total_msat > 0 else "payment"
     
     try:
         # Log the data being inserted
@@ -150,9 +151,9 @@ async def update_lnurluniversal_atomic(
     """
     logger.info(f"Atomic update for {lnurluniversal_id}: delta={amount_delta}, increment_uses={increment_uses}")
     
-    # Calculate new state based on amount_delta
-    # For positive delta (payment), state should be "withdraw" after update
-    # For negative delta (withdrawal), state depends on remaining balance
+    # State management logic:
+    # - State is always determined by balance: "payment" when balance=0, "withdraw" when balance>0
+    # - This ensures consistency between balance and state at all times
     uses_increment = ", uses = uses + 1" if increment_uses else ""
     
     # Handle different database types with atomic state update
@@ -185,14 +186,19 @@ async def update_lnurluniversal_atomic(
             {"id": lnurluniversal_id, "amount_delta": amount_delta}
         )
     
-    # Return the updated record
-    return await get_lnurluniversal(lnurluniversal_id)
+    # Log the state transition for debugging
+    updated = await get_lnurluniversal(lnurluniversal_id)
+    if updated:
+        new_state = "withdraw" if updated.total_msat > 0 else "payment"
+        logger.debug(f"Balance updated: {updated.total_msat} msat, state: {new_state}")
+    
+    return updated
 
 async def get_universal_comments(universal_id: str) -> List[dict]:
     """Get all comments for a universal"""
     rows = await db.fetchall(
         """
-        SELECT id, comment, timestamp, amount
+        SELECT id, comment, timestamp, amount_msat
         FROM lnurluniversal.invoice_comments
         WHERE universal_id = :universal_id
         ORDER BY timestamp DESC

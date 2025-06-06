@@ -8,6 +8,9 @@ from lnbits.core.services import create_invoice, pay_invoice
 from lnbits.core.crud import get_wallet
 from lnbits.extensions.lnurlp.crud import get_pay_link
 from lnbits.bolt11 import decode as decode_bolt11
+
+# Fee reserve constants (in millisatoshis)
+MIN_FEE_RESERVE_MSAT = 10000  # 10 sats minimum fee reserve
 from loguru import logger
 from typing import Optional
 from lnbits.decorators import require_admin_key, require_invoice_key
@@ -50,8 +53,8 @@ async def create_payment_response(request: Request, lnurluniversal_id: str, pay_
     return {
         "tag": "payRequest",
         "callback": callback_url,
-        "minSendable": pay_link.min * 1000,
-        "maxSendable": pay_link.max * 1000,
+        "minSendable": sats_to_msats(int(pay_link.min)),
+        "maxSendable": sats_to_msats(int(pay_link.max)),
         "metadata": f'[["text/plain", "{pay_link.description}"]]'
     }
 
@@ -217,13 +220,13 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
 
    # Get balance information (all balances in msats for consistency)
    universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
-   logging.info(f"Universal balance: {universal_balance_msat} msats ({universal_balance_msat // 1000} sats)")
+   logging.info(f"Universal balance: {universal_balance_msat} msats ({msats_to_sats(universal_balance_msat)} sats)")
 
    # Check actual wallet balance
    from lnbits.core.crud import get_wallet
    wallet = await get_wallet(lnurluniversal.wallet)
    actual_balance_msat = wallet.balance_msat
-   logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({actual_balance_msat // 1000} sats)")
+   logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({msats_to_sats(actual_balance_msat)} sats)")
 
    # Determine the appropriate mode based on balances and current state
    should_use_payment_mode = False
@@ -235,13 +238,12 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        state_change_reason = "Wallet balance below 60 sats and no universal balance"
    elif lnurluniversal.state == "withdraw":
        # Calculate withdrawable amount for withdraw mode
-       min_fee_reserve = 10000  # 10 sats minimum fee reserve
        max_withdrawable = universal_balance_msat
        
        # Limit withdrawal to ensure fee reserve
-       if max_withdrawable >= actual_balance_msat - min_fee_reserve:
-           max_withdrawable = max(0, actual_balance_msat - min_fee_reserve)
-           logging.info(f"Limiting withdrawal to {max_withdrawable // 1000} sats to ensure {min_fee_reserve // 1000} sats fee reserve")
+       if max_withdrawable >= actual_balance_msat - MIN_FEE_RESERVE_MSAT:
+           max_withdrawable = max(0, actual_balance_msat - MIN_FEE_RESERVE_MSAT)
+           logging.info(f"Limiting withdrawal to {msats_to_sats(max_withdrawable)} sats to ensure {msats_to_sats(MIN_FEE_RESERVE_MSAT)} sats fee reserve")
        
        # Ensure max_withdrawable doesn't exceed universal balance
        max_withdrawable = min(max_withdrawable, universal_balance_msat)
@@ -249,7 +251,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        # Switch to payment mode if insufficient withdrawable balance
        if max_withdrawable < 50000:  # Less than 50 sats withdrawable
            should_use_payment_mode = True
-           state_change_reason = f"Not enough withdrawable balance ({max_withdrawable // 1000} sats)"
+           state_change_reason = f"Not enough withdrawable balance ({msats_to_sats(max_withdrawable)} sats)"
    
    # Update state if needed (single decision point)
    if should_use_payment_mode and state_change_reason:
@@ -346,14 +348,14 @@ async def api_lnurl_callback(
         )
 
     # Log invoice creation details
-    logger.info(f"Creating invoice - Amount requested: {amount} msats ({amount // 1000} sats)")
+    logger.info(f"Creating invoice - Amount requested: {amount} msats ({msats_to_sats(amount)} sats)")
     logger.info(f"Invoice wallet: {pay_link.wallet}")
     logger.info(f"Invoice memo: {pay_link.description}{' - ' + comment if comment else ''}")
     
     try:
         payment = await create_invoice(
             wallet_id=pay_link.wallet,
-            amount=amount // 1000,  # Convert from msats to sats for invoice creation
+            amount=msats_to_sats(amount),  # Convert from msats to sats for invoice creation
             memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
             extra={
                 "tag": "ext_lnurluniversal",
@@ -375,7 +377,7 @@ async def api_lnurl_callback(
     # Do not update balance here - it will be updated when payment is confirmed in tasks.py
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
     
-    logger.info(f"Created invoice for universal {lnurluniversal_id}: payment_hash={payment.payment_hash}, amount={amount // 1000} sats")
+    logger.info(f"Created invoice for universal {lnurluniversal_id}: payment_hash={payment.payment_hash}, amount={msats_to_sats(amount)} sats")
     logger.info(f"Invoice extra data: {payment.extra}")
     
     # Decode and log invoice details for debugging
@@ -448,14 +450,13 @@ async def api_withdraw_callback(
       logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat, fee_reserve={fee_reserve_msat} msat, total_needed={total_needed_msat} msat")
       
       # The system requires at least 10 sats reserved for fees
-      min_required_reserve = 10000  # 10 sats as per the error message
       
       # Check if wallet has enough balance for withdrawal while leaving fee reserve
-      if wallet_balance_msat < amount_msat + min_required_reserve:
-          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, required_reserve={min_required_reserve}, universal_id={lnurluniversal_id}")
+      if wallet_balance_msat < amount_msat + MIN_FEE_RESERVE_MSAT:
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, required_reserve={MIN_FEE_RESERVE_MSAT}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Insufficient balance. Need at least {min_required_reserve // 1000} sats reserved for fees"
+              "reason": f"Insufficient balance. Need at least {msats_to_sats(MIN_FEE_RESERVE_MSAT)} sats reserved for fees"
           }
       
       payment_hash = await pay_invoice(

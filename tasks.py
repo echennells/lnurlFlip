@@ -8,6 +8,7 @@ from lnbits.tasks import register_invoice_listener
 from loguru import logger
 
 from .crud import get_lnurluniversal, update_lnurluniversal, update_lnurluniversal_atomic, process_payment_with_lock
+from .utils import sats_to_msats
 
 #######################################
 ########## RUN YOUR TASKS HERE ########
@@ -43,7 +44,7 @@ async def on_invoice_paid(payment: Payment) -> None:
     logger.info("-------- PAYMENT PROCESSING START --------")
     logger.info(f"Processing payment in on_invoice_paid: {payment}")
     logger.info(f"Payment extra data: {payment.extra}")
-    logger.info(f"Payment amount: {payment.amount} sats ({payment.amount * 1000} msats)")
+    logger.info(f"Payment amount: {payment.amount} sats ({sats_to_msats(payment.amount)} msats)")
     logger.info(f"Payment tag: {payment.extra.get('tag') if payment.extra else 'No tag'}")
     logger.info(f"Payment hash: {payment.payment_hash}")
 
@@ -67,7 +68,7 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     # Calculate amount delta based on payment type
     # payment.amount is in satoshis, convert to millisatoshis
-    amount_msat = abs(payment.amount) * 1000  # Convert sats to msats
+    amount_msat = sats_to_msats(abs(payment.amount))  # Convert sats to msats
     if is_withdrawal:
         amount_delta = -amount_msat  # Make negative for withdrawals
         logger.info(f"This is a withdrawal. Amount delta: {amount_delta} msats")
