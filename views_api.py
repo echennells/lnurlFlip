@@ -23,16 +23,14 @@ from .crud import (
     get_lnurluniversal,
     get_lnurluniversals,
     update_lnurluniversal,
-    update_lnurluniversal_atomic,
     update_state_if_condition,
     get_lnurluniversal_balance,
     get_universal_comments,
     check_duplicate_name,
     process_payment_with_lock,
-    validate_state_transition,
     db
 )
-from .utils import validate_msat_amount, validate_sat_amount, sats_to_msats, msats_to_sats
+from .utils import sats_to_msats, msats_to_sats
 from .models import CreateLnurlUniversalData, LnurlUniversal
 from .utils import get_withdraw_link_info, check_universal_access
 import time

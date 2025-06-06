@@ -1,13 +1,10 @@
 import asyncio
-import logging
 
 from lnbits.core.models import Payment
-from lnbits.core.services import websocket_updater
-from lnbits.helpers import get_current_extension_name
 from lnbits.tasks import register_invoice_listener
 from loguru import logger
 
-from .crud import get_lnurluniversal, update_lnurluniversal, update_lnurluniversal_atomic, process_payment_with_lock
+from .crud import get_lnurluniversal, process_payment_with_lock
 from .utils import sats_to_msats
 
 #######################################

@@ -1,6 +1,6 @@
 from typing import Optional, Union, List
 from lnbits.db import Database
-from .models import LnurlUniversal, CreateLnurlUniversalData
+from .models import LnurlUniversal
 from fastapi import HTTPException
 from loguru import logger
 import asyncio

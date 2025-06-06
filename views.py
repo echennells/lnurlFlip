@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException
 from starlette.responses import HTMLResponse
 
 from .crud import get_lnurluniversal
+from lnurl import encode as lnurl_encode
 
 lnurluniversal_generic_router = APIRouter()
 
@@ -42,12 +43,19 @@ async def lnurluniversal(request: Request, lnurluniversal_id):
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
         )
+    
+    # Generate the full LNURL for the QR code (without lightning: prefix as template adds it)
+    base_url = str(request.base_url).rstrip('/')
+    redirect_url = f"{base_url}/lnurluniversal/api/v1/redirect/{lnurluniversal_id}"
+    lnurl = lnurl_encode(redirect_url)
+    
     return lnurluniversal_renderer().TemplateResponse(
         "lnurluniversal/lnurluniversal.html",
         {
             "request": request,
             "lnurluniversal_id": lnurluniversal_id,
-            "lnurlpay": lnurluniversal.lnurlpay,
+            "lnurlpay": lnurluniversal.selectedLnurlp,
+            "lnurl": lnurl,
             "web_manifest": f"/lnurluniversal/manifest/{lnurluniversal_id}.webmanifest",
         },
     )
