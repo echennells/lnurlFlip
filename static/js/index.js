@@ -142,13 +142,21 @@ window.app = Vue.createApp({
             ? response.data.data.filter(link => link.wallet === this.formDialog.data.wallet)
             : response.data.data
 
-          this.lnurlwOptions = filteredLinks.map(link => ({
-            label: `${link.title || 'Untitled'} (${(link.min_withdrawable || 0) / 1000} - ${(link.max_withdrawable || 0) / 1000} sats)`,
-            value: link.id,
-            lnurl: link.lnurl,
-            min: link.min_withdrawable || 0,
-            max: link.max_withdrawable || 0
-          }))
+          this.lnurlwOptions = filteredLinks.map(link => {
+            const minSats = link.min_withdrawable || 0
+            const maxSats = link.max_withdrawable || 0
+            const amountDisplay = minSats === maxSats 
+              ? `${minSats} sats` 
+              : `${minSats} - ${maxSats} sats`
+            
+            return {
+              label: `${link.title || 'Untitled'} (${amountDisplay})`,
+              value: link.id,
+              lnurl: link.lnurl,
+              min: link.min_withdrawable || 0,
+              max: link.max_withdrawable || 0
+            }
+          })
         }
       } catch (error) {
         console.error('Error fetching LNURL withdraw links:', error)

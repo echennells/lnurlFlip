@@ -235,21 +235,14 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        should_use_payment_mode = True
        state_change_reason = "Wallet balance below 60 sats and no universal balance"
    elif lnurluniversal.state == "withdraw":
-       # Calculate withdrawable amount for withdraw mode
-       max_withdrawable = universal_balance_msat
-       
-       # Limit withdrawal to ensure fee reserve
-       if max_withdrawable >= actual_balance_msat - MIN_FEE_RESERVE_MSAT:
-           max_withdrawable = max(0, actual_balance_msat - MIN_FEE_RESERVE_MSAT)
-           logging.info(f"Limiting withdrawal to {msats_to_sats(max_withdrawable)} sats to ensure {msats_to_sats(MIN_FEE_RESERVE_MSAT)} sats fee reserve")
-       
-       # Ensure max_withdrawable doesn't exceed universal balance
-       max_withdrawable = min(max_withdrawable, universal_balance_msat)
+       # Check if we have enough balance to allow withdrawals
+       # We need at least 50 sats withdrawable after accounting for fee reserve
+       available_for_withdrawal = min(universal_balance_msat, actual_balance_msat - MIN_FEE_RESERVE_MSAT)
        
        # Switch to payment mode if insufficient withdrawable balance
-       if max_withdrawable < 50000:  # Less than 50 sats withdrawable
+       if available_for_withdrawal < 50000:  # Less than 50 sats withdrawable
            should_use_payment_mode = True
-           state_change_reason = f"Not enough withdrawable balance ({msats_to_sats(max_withdrawable)} sats)"
+           state_change_reason = f"Not enough withdrawable balance ({msats_to_sats(available_for_withdrawal)} sats)"
    
    # Update state if needed (single decision point)
    if should_use_payment_mode and state_change_reason:
@@ -273,22 +266,44 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        # Withdraw mode response
        logging.info("Processing withdraw request")
        
+       # Get withdraw link configuration
+       withdraw_info = await get_withdraw_link_info(lnurluniversal.selectedLnurlw)
+       if "error" in withdraw_info:
+           logger.error(f"Withdraw link not found: {lnurluniversal.selectedLnurlw} for universal_id: {lnurluniversal_id}")
+           raise HTTPException(status_code=404, detail="Withdraw link not found")
+       
        callback_url = str(request.url_for(
            "lnurluniversal.api_withdraw_callback",
            lnurluniversal_id=lnurluniversal_id
        ))
        
-       # max_withdrawable was already calculated above if in withdraw state
-       if 'max_withdrawable' not in locals():
-           # This shouldn't happen, but handle edge case
-           max_withdrawable = universal_balance_msat
+       # Use withdraw link's configured limits (converting from sats to msats)
+       min_withdrawable_msat = sats_to_msats(withdraw_info["min_withdrawable"])
+       max_withdrawable_msat = sats_to_msats(withdraw_info["max_withdrawable"])
+       
+       logging.info(f"Withdraw link configured limits - min: {msats_to_sats(min_withdrawable_msat)} sats, max: {msats_to_sats(max_withdrawable_msat)} sats")
+       
+       # Apply constraints: universal balance and wallet balance
+       # First, limit to universal balance
+       effective_max_msat = min(max_withdrawable_msat, universal_balance_msat)
+       logging.info(f"After applying universal balance constraint: max = {msats_to_sats(effective_max_msat)} sats")
+       
+       # Then, ensure we don't exceed available wallet balance (with fee reserve)
+       available_wallet_balance = actual_balance_msat - MIN_FEE_RESERVE_MSAT
+       if effective_max_msat > available_wallet_balance:
+           effective_max_msat = max(0, available_wallet_balance)
+           logging.info(f"Further limiting withdrawal to {msats_to_sats(effective_max_msat)} sats due to wallet balance")
+       
+       max_withdrawable_msat = effective_max_msat
+       
+       logging.info(f"Final withdraw limits - min: {msats_to_sats(min_withdrawable_msat)} sats, max: {msats_to_sats(max_withdrawable_msat)} sats")
        
        return {
            "tag": "withdrawRequest",
            "callback": callback_url,
            "k1": urlsafe_short_hash(),
-           "minWithdrawable": 50000,  # 50 sat minimum
-           "maxWithdrawable": max_withdrawable,
+           "minWithdrawable": min_withdrawable_msat,
+           "maxWithdrawable": max_withdrawable_msat,
            "defaultDescription": f"Withdraw from {lnurluniversal.name}"
        }
 
@@ -414,8 +429,27 @@ async def api_withdraw_callback(
   if not lnurluniversal:
       return {"status": "ERROR", "reason": "Record not found"}
 
+  # Get withdraw link configuration to validate limits
+  withdraw_info = await get_withdraw_link_info(lnurluniversal.selectedLnurlw)
+  if "error" in withdraw_info:
+      logger.error(f"Withdraw link not found: {lnurluniversal.selectedLnurlw} for universal_id: {lnurluniversal_id}")
+      return {"status": "ERROR", "reason": "Withdraw link configuration error"}
+
   amount_msat = decode_bolt11(pr).amount_msat  # Amount from invoice in msats
   available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)  # Balance in msats
+
+  # Check against withdraw link limits
+  min_withdrawable_msat = sats_to_msats(withdraw_info["min_withdrawable"])
+  max_withdrawable_msat = sats_to_msats(withdraw_info["max_withdrawable"])
+  
+  # Apply the same constraint as in the initial request: limit to universal balance
+  effective_max_msat = min(max_withdrawable_msat, available_balance_msat)
+  
+  if amount_msat < min_withdrawable_msat:
+      return {"status": "ERROR", "reason": f"Amount below minimum: {msats_to_sats(min_withdrawable_msat)} sats"}
+  
+  if amount_msat > effective_max_msat:
+      return {"status": "ERROR", "reason": f"Amount exceeds maximum: {msats_to_sats(effective_max_msat)} sats"}
 
   if amount_msat > available_balance_msat:
       return {"status": "ERROR", "reason": "Insufficient balance for withdrawal"}
