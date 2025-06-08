@@ -1,142 +1,60 @@
-# the migration file is where you build your database tables
-# If you create a new release for your extension ,
-# remember the migration file is like a blockchain, never edit only add!
+# Migration file for lnurluniversal extension
 
 async def m001_initial(db):
     """
-    Initial templates table.
+    Create initial tables with complete schema
     """
-    print("Running m001_initial migration...")
+    # Create main table
     await db.execute(
-        """
-        CREATE TABLE maintable (
-            id TEXT PRIMARY KEY,
-            wallet TEXT NOT NULL,
-            name TEXT NOT NULL,
-            total_msat INTEGER DEFAULT 0,
-            lnurlpayamount INTEGER DEFAULT 0,
-            lnurlwithdrawamount_sat INTEGER DEFAULT 0,
-            lnurlwithdraw TEXT,
-            lnurlpay TEXT
-        );
-    """
-    )
-
-    print("m001_initial migration completed")
-
-async def m002_update_schema(db):
-    """
-    Updates table structure to new schema.
-    """
-    # First create a backup of existing data
-    await db.execute(
-        """
-        CREATE TEMPORARY TABLE lnurluniversal_backup AS
-        SELECT id, wallet, name
-        FROM lnurluniversal.maintable;
-        """
-    )
-
-    # Drop the existing table
-    await db.execute("DROP TABLE lnurluniversal.maintable;")
-
-    # Create the new table with updated schema
-    await db.execute(
-        """
+        f"""
         CREATE TABLE lnurluniversal.maintable (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             wallet TEXT NOT NULL,
-            lnurlwithdrawamount_sat INTEGER,
+            lnurlwithdrawamount_sat {db.big_int},
             selectedLnurlp TEXT NOT NULL,
-            selectedLnurlw TEXT NOT NULL
+            selectedLnurlw TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'payment',
+            total_msat {db.big_int} NOT NULL DEFAULT 0,
+            uses {db.big_int} NOT NULL DEFAULT 0
         );
         """
     )
-
-    # Restore the backed up data with default values for new fields
+    
+    # Create pending withdrawals table
     await db.execute(
-        """
-        INSERT INTO lnurluniversal.maintable (id, name, wallet, lnurlwithdrawamount_sat, selectedLnurlp, selectedLnurlw)
-        SELECT
-            id,
-            name,
-            wallet,
-            NULL as lnurlwithdrawamount_sat,
-            '' as selectedLnurlp,
-            '' as selectedLnurlw
-        FROM lnurluniversal_backup;
-        """
-    )
-
-    # Drop the temporary backup table
-    await db.execute("DROP TABLE lnurluniversal_backup;")
-
-async def m003_add_state(db):
-    """
-    Add state column to maintable.
-    """
-    await db.execute(
-        """
-        ALTER TABLE lnurluniversal.maintable 
-        ADD COLUMN state TEXT NOT NULL DEFAULT 'inactive';
-        """
-    )
-
-async def m004_add_total(db):
-    """
-    Add total column back to maintable.
-    """
-    await db.execute(
-        """
-        ALTER TABLE lnurluniversal.maintable
-        ADD COLUMN total_msat INTEGER NOT NULL DEFAULT 0;
-        """
-    )
-
-# Add to migrations.py
-async def m005_add_pending_withdrawals(db):
-    """
-    Add pending withdrawals table
-    """
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lnurluniversal.pending_withdrawals (
+        f"""
+        CREATE TABLE lnurluniversal.pending_withdrawals (
             id TEXT PRIMARY KEY,
-            universal_id TEXT NOT NULL,
-            amount_msat INTEGER NOT NULL,
+            universal_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
+            amount_msat {db.big_int} NOT NULL,
             status TEXT DEFAULT 'pending',
-            created_time INTEGER NOT NULL,
-            payment_request TEXT NOT NULL,
-            FOREIGN KEY (universal_id) REFERENCES maintable(id)
+            created_time {db.big_int} NOT NULL,
+            payment_request TEXT NOT NULL
         );
         """
     )
-
-async def m007_add_uses(db):
-    """
-    Add uses column to maintable to track deposit/withdrawal cycles
-    """
+    
+    # Create invoice comments table
     await db.execute(
-        """
-        ALTER TABLE lnurluniversal.maintable
-        ADD COLUMN uses INTEGER NOT NULL DEFAULT 0;
-        """
-    )
-
-async def m008_add_comments(db):
-    """
-    Add comments table for LNURL-pay comments
-    """
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lnurluniversal.invoice_comments (
+        f"""
+        CREATE TABLE lnurluniversal.invoice_comments (
             id TEXT PRIMARY KEY,
-            universal_id TEXT NOT NULL,
+            universal_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
             comment TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            amount_msat INTEGER NOT NULL,
-            FOREIGN KEY (universal_id) REFERENCES maintable(id)
+            timestamp {db.big_int} NOT NULL,
+            amount_msat {db.big_int} NOT NULL
         );
         """
+    )
+    
+    # Create indexes
+    await db.execute(
+        "CREATE INDEX idx_pending_withdrawals_universal_id ON lnurluniversal.pending_withdrawals(universal_id)"
+    )
+    await db.execute(
+        "CREATE INDEX idx_pending_withdrawals_status ON lnurluniversal.pending_withdrawals(status)"
+    )
+    await db.execute(
+        "CREATE INDEX idx_invoice_comments_universal_id ON lnurluniversal.invoice_comments(universal_id)"
     )
