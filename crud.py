@@ -15,8 +15,8 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     # Ensure fields are initialized with valid values
     data.total_msat = 0
     data.uses = 0
-    # State logic: payment mode when balance is 0, withdraw mode when balance > 0
-    data.state = "withdraw" if data.total_msat > 0 else "payment"
+    # Always start in payment mode - state will be determined dynamically based on balance
+    data.state = "payment"
     
     try:
         # Log the data being inserted
@@ -151,22 +151,16 @@ async def update_lnurluniversal_atomic(
     """
     logger.info(f"Atomic update for {lnurluniversal_id}: delta={amount_delta}, increment_uses={increment_uses}")
     
-    # State management logic:
-    # - State is always determined by balance: "payment" when balance=0, "withdraw" when balance>0
-    # - This ensures consistency between balance and state at all times
+    # Update balance and optionally increment uses
     uses_increment = ", uses = uses + 1" if increment_uses else ""
     
-    # Handle different database types with atomic state update
+    # Handle different database types
     if db.type == "SQLITE":
         # SQLite uses MAX instead of GREATEST
         await db.execute(
             f"""
             UPDATE lnurluniversal.maintable
-            SET total_msat = MAX(0, total_msat + :amount_delta){uses_increment},
-                state = CASE 
-                    WHEN MAX(0, total_msat + :amount_delta) > 0 THEN 'withdraw'
-                    ELSE 'payment'
-                END
+            SET total_msat = MAX(0, total_msat + :amount_delta){uses_increment}
             WHERE id = :id
             """,
             {"id": lnurluniversal_id, "amount_delta": amount_delta}
@@ -176,21 +170,16 @@ async def update_lnurluniversal_atomic(
         await db.execute(
             f"""
             UPDATE lnurluniversal.maintable
-            SET total_msat = GREATEST(0, total_msat + :amount_delta){uses_increment},
-                state = CASE 
-                    WHEN GREATEST(0, total_msat + :amount_delta) > 0 THEN 'withdraw'
-                    ELSE 'payment'
-                END
+            SET total_msat = GREATEST(0, total_msat + :amount_delta){uses_increment}
             WHERE id = :id
             """,
             {"id": lnurluniversal_id, "amount_delta": amount_delta}
         )
     
-    # Log the state transition for debugging
+    # Return the updated record
     updated = await get_lnurluniversal(lnurluniversal_id)
     if updated:
-        new_state = "withdraw" if updated.total_msat > 0 else "payment"
-        logger.debug(f"Balance updated: {updated.total_msat} msat, state: {new_state}")
+        logger.debug(f"Balance updated: {updated.total_msat} msat")
     
     return updated
 
@@ -213,51 +202,20 @@ async def update_state_if_condition(
     condition: str = None
 ) -> bool:
     """
-    Atomically update the state if a condition is met and the transition is valid.
-    This prevents race conditions in state transitions.
+    Legacy function - kept for compatibility but state is now determined dynamically.
     
     Args:
         lnurluniversal_id: The ID of the universal to update
         new_state: The new state to set
-        condition: SQL condition to check (e.g., "state = 'payment' AND total_msat = 0")
+        condition: SQL condition to check
     
     Returns:
-        True if the state was updated, False otherwise
+        Always returns True since state is now dynamic
     """
-    # First check if this is a valid state transition
-    current = await get_lnurluniversal(lnurluniversal_id)
-    if not current:
-        return False
-    
-    # Validate the state transition
-    if not validate_state_transition(current.state, new_state):
-        logger.warning(f"Invalid state transition attempted: {current.state} -> {new_state}")
-        return False
-    
-    # If the states are the same, no update needed
-    if current.state == new_state:
-        return True
-    
-    if condition:
-        query = f"""
-        UPDATE lnurluniversal.maintable
-        SET state = :new_state
-        WHERE id = :id AND ({condition})
-        """
-    else:
-        query = """
-        UPDATE lnurluniversal.maintable
-        SET state = :new_state
-        WHERE id = :id
-        """
-    
-    result = await db.execute(
-        query,
-        {"id": lnurluniversal_id, "new_state": new_state}
-    )
-    
-    # Check if any rows were updated
-    return result and hasattr(result, 'rowcount') and result.rowcount > 0
+    # State is now determined dynamically based on balance
+    # This function is kept for compatibility but doesn't do anything
+    logger.debug(f"update_state_if_condition called but state is now dynamic (id: {lnurluniversal_id})")
+    return True
 
 async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[str] = None) -> bool:
     """
@@ -353,25 +311,14 @@ async def process_payment_with_lock(
 
 def validate_state_transition(current_state: str, new_state: str) -> bool:
     """
-    Validate if a state transition is allowed.
-    This is a pure function that can be used anywhere state transitions occur.
+    Legacy function - kept for compatibility.
+    State transitions are now handled dynamically based on balance.
     
     Args:
         current_state: The current state of the universal
         new_state: The proposed new state
         
     Returns:
-        True if the transition is valid, False otherwise
+        Always returns True since state is now dynamic
     """
-    # Define valid state transitions
-    valid_transitions = {
-        "payment": ["withdraw"],  # Can go from payment to withdraw
-        "withdraw": ["payment"],  # Can go from withdraw to payment
-    }
-    
-    # Same state is always valid (no-op)
-    if current_state == new_state:
-        return True
-        
-    # Check if transition is in our valid transitions map
-    return new_state in valid_transitions.get(current_state, [])
+    return True

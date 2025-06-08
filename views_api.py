@@ -8,14 +8,23 @@ from lnbits.core.services import create_invoice, pay_invoice
 from lnbits.core.crud import get_wallet
 from lnbits.extensions.lnurlp.crud import get_pay_link
 from lnbits.bolt11 import decode as decode_bolt11
-
-# Fee reserve constants (in millisatoshis)
-MIN_FEE_RESERVE_MSAT = 10000  # 10 sats minimum fee reserve
 from loguru import logger
 from typing import Optional
 from lnbits.decorators import require_admin_key, require_invoice_key
 from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
+
+# Balance and fee constants (in millisatoshis)
+MIN_WALLET_BALANCE_MSAT = 50000     # 50 sats minimum wallet balance for withdraw mode
+MIN_WITHDRAWABLE_MSAT = 50000       # 50 sats minimum withdrawable amount
+MIN_FEE_RESERVE_MSAT = 10000        # 10 sats minimum fee reserve
+
+# Routing fee thresholds (in millisatoshis)
+FEE_THRESHOLD_TINY = 50000          # 50 sats - flat 10 sat fee
+FEE_THRESHOLD_SMALL = 100000        # 100 sats - 10% fee
+FEE_THRESHOLD_MEDIUM = 1000000      # 1000 sats - 5% fee
+FEE_THRESHOLD_LARGE = 10000000      # 10,000 sats - 2% fee
+MAX_ROUTING_FEE_MSAT = 500000       # 500 sats maximum fee cap
 
 from .crud import (
     create_lnurluniversal,
@@ -69,21 +78,21 @@ def calculate_routing_fee_reserve(amount_msat: int) -> int:
         The fee reserve in millisatoshis
     """
     # More conservative fee structure for better routing success
-    if amount_msat <= 50000:  # 50 sats
-        # 10 sats flat fee for very small amounts (50 sats or less)
-        return 10000  # 10 sats
-    elif amount_msat <= 100000:  # 100 sats
-        # 10% for amounts <= 100 sats, min 10 sats
-        return max(10000, round(amount_msat * 0.10))
-    elif amount_msat <= 1000000:  # 1000 sats
-        # 5% for amounts <= 1000 sats, min 10 sats
-        return max(10000, round(amount_msat * 0.05))
-    elif amount_msat <= 10000000:  # 10,000 sats
-        # 2% for amounts <= 10,000 sats, min 20 sats
+    if amount_msat <= FEE_THRESHOLD_TINY:
+        # Flat fee for very small amounts
+        return MIN_FEE_RESERVE_MSAT
+    elif amount_msat <= FEE_THRESHOLD_SMALL:
+        # 10% for small amounts, min 10 sats
+        return max(MIN_FEE_RESERVE_MSAT, round(amount_msat * 0.10))
+    elif amount_msat <= FEE_THRESHOLD_MEDIUM:
+        # 5% for medium amounts, min 10 sats
+        return max(MIN_FEE_RESERVE_MSAT, round(amount_msat * 0.05))
+    elif amount_msat <= FEE_THRESHOLD_LARGE:
+        # 2% for large amounts, min 20 sats
         return max(20000, round(amount_msat * 0.02))
     else:
-        # 1% for larger amounts with min 50 sats, max 500 sats
-        return min(500000, max(50000, round(amount_msat * 0.01)))
+        # 1% for very large amounts with min 50 sats, max 500 sats
+        return min(MAX_ROUTING_FEE_MSAT, max(50000, round(amount_msat * 0.01)))
 
 
 #######################################
@@ -226,35 +235,22 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    actual_balance_msat = wallet.balance_msat
    logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({msats_to_sats(actual_balance_msat)} sats)")
 
-   # Determine the appropriate mode based on balances and current state
-   should_use_payment_mode = False
-   state_change_reason = None
+   # Simplified state determination logic:
+   # Use withdraw mode only if we have sufficient balance
+   # Otherwise, use payment mode
+   can_withdraw = (
+       universal_balance_msat >= MIN_WITHDRAWABLE_MSAT and  # Has minimum withdrawable balance
+       actual_balance_msat >= (MIN_WITHDRAWABLE_MSAT + MIN_FEE_RESERVE_MSAT)  # Wallet can cover withdrawal + fees
+   )
    
-   # Check if we should force payment mode
-   if actual_balance_msat < 60000 and universal_balance_msat == 0:
-       should_use_payment_mode = True
-       state_change_reason = "Wallet balance below 60 sats and no universal balance"
-   elif lnurluniversal.state == "withdraw":
-       # Check if we have enough balance to allow withdrawals
-       # We need at least 50 sats withdrawable after accounting for fee reserve
-       available_for_withdrawal = min(universal_balance_msat, actual_balance_msat - MIN_FEE_RESERVE_MSAT)
-       
-       # Switch to payment mode if insufficient withdrawable balance
-       if available_for_withdrawal < 50000:  # Less than 50 sats withdrawable
-           should_use_payment_mode = True
-           state_change_reason = f"Not enough withdrawable balance ({msats_to_sats(available_for_withdrawal)} sats)"
+   # Log the decision
+   if can_withdraw:
+       logging.info(f"Can withdraw: universal balance {msats_to_sats(universal_balance_msat)} sats, wallet balance {msats_to_sats(actual_balance_msat)} sats")
+   else:
+       logging.info(f"Cannot withdraw: universal balance {msats_to_sats(universal_balance_msat)} sats, wallet balance {msats_to_sats(actual_balance_msat)} sats")
    
-   # Update state if needed (single decision point)
-   if should_use_payment_mode and state_change_reason:
-       logging.info(f"{state_change_reason}, switching to payment mode")
-       await update_state_if_condition(
-           lnurluniversal_id,
-           "payment",
-           "state != 'payment'"
-       )
-   
-   # Generate appropriate response based on final mode
-   if should_use_payment_mode or lnurluniversal.state == "payment":
+   # Generate appropriate response based on withdrawal capability
+   if not can_withdraw:
        # Payment mode response
        pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
        if not pay_link:
