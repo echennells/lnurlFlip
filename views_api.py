@@ -311,7 +311,7 @@ async def api_lnurl_callback(
     request: Request,
     lnurluniversal_id: str,
     amount: int = Query(...),
-    comment: Optional[str] = Query(None)
+    comment: Optional[str] = Query(None, max_length=500, regex="^[^<>]*$")
 ):
     lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
     if not lnurluniversal:
