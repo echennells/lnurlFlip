@@ -15,7 +15,6 @@ from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
 
 # Balance constants (in millisatoshis)
-MIN_WALLET_BALANCE_MSAT = 50000     # 50 sats minimum wallet balance for withdraw mode
 MIN_WITHDRAWABLE_MSAT = 50000       # 50 sats minimum withdrawable amount
 
 from .crud import (
@@ -220,11 +219,11 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    actual_balance_msat = wallet.balance_msat
 
    # Simplified state determination logic:
-   # Use withdraw mode only if we have sufficient balance
-   # Otherwise, use payment mode
+   # Use withdraw mode only if universal has withdrawable balance
+   # and wallet can cover the withdrawal
    can_withdraw = (
        universal_balance_msat >= MIN_WITHDRAWABLE_MSAT and  # Has minimum withdrawable balance
-       actual_balance_msat >= MIN_WITHDRAWABLE_MSAT  # Wallet has enough balance
+       actual_balance_msat >= universal_balance_msat  # Wallet can cover the withdrawal
    )
    
    # Log the decision
