@@ -14,7 +14,6 @@ async def m001_initial(db):
             lnurlwithdrawamount_sat {db.big_int},
             selectedLnurlp TEXT NOT NULL,
             selectedLnurlw TEXT NOT NULL,
-            state TEXT NOT NULL DEFAULT 'payment',
             total_msat {db.big_int} NOT NULL DEFAULT 0,
             uses {db.big_int} NOT NULL DEFAULT 0
         );

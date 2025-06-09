@@ -11,7 +11,6 @@ class CreateLnurlUniversalData(BaseModel):
     lnurlwithdrawamount_sat: Optional[int] = None  # Amount in sats (if set)
     selectedLnurlp: str
     selectedLnurlw: str
-    state: str = "payment"
 
 
 class LnurlUniversal(BaseModel):
@@ -21,6 +20,5 @@ class LnurlUniversal(BaseModel):
     lnurlwithdrawamount_sat: Optional[int] = None  # Amount in sats (if set)
     selectedLnurlp: str
     selectedLnurlw: str
-    state: str = "payment"
     total_msat: int = 0  # Total balance in msats
     uses: int = 0  # Number of completed transactions

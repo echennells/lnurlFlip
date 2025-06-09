@@ -185,7 +185,6 @@ window.app = Vue.createApp({
         id: this.formDialog.data.wallet
       })
       const data = _.clone(this.formDialog.data)
-      data.state = 'payment'
       
       if (data.id) {
         this.updateUniversal(wallet, data)

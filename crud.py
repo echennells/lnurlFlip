@@ -15,8 +15,6 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     # Ensure fields are initialized with valid values
     data.total_msat = 0
     data.uses = 0
-    # Always start in payment mode - state will be determined dynamically based on balance
-    data.state = "payment"
     
     try:
         # Log the data being inserted
@@ -196,26 +194,6 @@ async def get_universal_comments(universal_id: str) -> List[dict]:
     )
     return [dict(row) for row in rows]
 
-async def update_state_if_condition(
-    lnurluniversal_id: str,
-    new_state: str,
-    condition: str = None
-) -> bool:
-    """
-    Legacy function - kept for compatibility but state is now determined dynamically.
-    
-    Args:
-        lnurluniversal_id: The ID of the universal to update
-        new_state: The new state to set
-        condition: SQL condition to check
-    
-    Returns:
-        Always returns True since state is now dynamic
-    """
-    # State is now determined dynamically based on balance
-    # This function is kept for compatibility but doesn't do anything
-    logger.debug(f"update_state_if_condition called but state is now dynamic (id: {lnurluniversal_id})")
-    return True
 
 async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[str] = None) -> bool:
     """
@@ -309,16 +287,3 @@ async def process_payment_with_lock(
             except:
                 pass  # Ignore any cleanup errors
 
-def validate_state_transition(current_state: str, new_state: str) -> bool:
-    """
-    Legacy function - kept for compatibility.
-    State transitions are now handled dynamically based on balance.
-    
-    Args:
-        current_state: The current state of the universal
-        new_state: The proposed new state
-        
-    Returns:
-        Always returns True since state is now dynamic
-    """
-    return True

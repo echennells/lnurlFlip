@@ -32,7 +32,6 @@ from .crud import (
     get_lnurluniversal,
     get_lnurluniversals,
     update_lnurluniversal,
-    update_state_if_condition,
     get_lnurluniversal_balance,
     get_universal_comments,
     check_duplicate_name,
