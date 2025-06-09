@@ -14,17 +14,9 @@ from lnbits.decorators import require_admin_key, require_invoice_key
 from lnbits.helpers import urlsafe_short_hash
 from lnurl import encode as lnurl_encode
 
-# Balance and fee constants (in millisatoshis)
+# Balance constants (in millisatoshis)
 MIN_WALLET_BALANCE_MSAT = 50000     # 50 sats minimum wallet balance for withdraw mode
 MIN_WITHDRAWABLE_MSAT = 50000       # 50 sats minimum withdrawable amount
-MIN_FEE_RESERVE_MSAT = 10000        # 10 sats minimum fee reserve
-
-# Routing fee thresholds (in millisatoshis)
-FEE_THRESHOLD_TINY = 50000          # 50 sats - flat 10 sat fee
-FEE_THRESHOLD_SMALL = 100000        # 100 sats - 10% fee
-FEE_THRESHOLD_MEDIUM = 1000000      # 1000 sats - 5% fee
-FEE_THRESHOLD_LARGE = 10000000      # 10,000 sats - 2% fee
-MAX_ROUTING_FEE_MSAT = 500000       # 500 sats maximum fee cap
 
 from .crud import (
     create_lnurluniversal,
@@ -39,7 +31,7 @@ from .crud import (
     db
 )
 from .models import CreateLnurlUniversalData, LnurlUniversal
-from .utils import get_withdraw_link_info, check_universal_access
+from .utils import get_withdraw_link_info
 import time
 import logging
 
@@ -66,31 +58,6 @@ async def create_payment_response(request: Request, lnurluniversal_id: str, pay_
 
 
 
-def calculate_routing_fee_reserve(amount_msat: int) -> int:
-    """Calculate appropriate fee reserve for Lightning routing.
-    
-    Args:
-        amount_msat: The amount in millisatoshis to be sent
-        
-    Returns:
-        The fee reserve in millisatoshis
-    """
-    # More conservative fee structure for better routing success
-    if amount_msat <= FEE_THRESHOLD_TINY:
-        # Flat fee for very small amounts
-        return MIN_FEE_RESERVE_MSAT
-    elif amount_msat <= FEE_THRESHOLD_SMALL:
-        # 10% for small amounts, min 10 sats
-        return max(MIN_FEE_RESERVE_MSAT, round(amount_msat * 0.10))
-    elif amount_msat <= FEE_THRESHOLD_MEDIUM:
-        # 5% for medium amounts, min 10 sats
-        return max(MIN_FEE_RESERVE_MSAT, round(amount_msat * 0.05))
-    elif amount_msat <= FEE_THRESHOLD_LARGE:
-        # 2% for large amounts, min 20 sats
-        return max(20000, round(amount_msat * 0.02))
-    else:
-        # 1% for very large amounts with min 50 sats, max 500 sats
-        return min(MAX_ROUTING_FEE_MSAT, max(50000, round(amount_msat * 0.01)))
 
 
 #######################################
@@ -161,8 +128,15 @@ async def api_get_balance(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    # Use centralized authorization check
-    universal = await check_universal_access(lnurluniversal_id, wallet)
+    universal = await get_lnurluniversal(lnurluniversal_id)
+    if not universal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Check if user has access to this universal
+    if universal.wallet != wallet.wallet.id:
+        user = await get_user(wallet.wallet.user)
+        if not user or universal.wallet not in user.wallet_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
     
     balance = await get_lnurluniversal_balance(lnurluniversal_id)
     return {"balance": balance}
@@ -173,8 +147,15 @@ async def api_get_lnurl(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    # Use centralized authorization check
-    universal = await check_universal_access(lnurluniversal_id, wallet)
+    universal = await get_lnurluniversal(lnurluniversal_id)
+    if not universal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Check if user has access to this universal
+    if universal.wallet != wallet.wallet.id:
+        user = await get_user(wallet.wallet.user)
+        if not user or universal.wallet not in user.wallet_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
     
     # Just construct the URL directly
     base_url = str(request.base_url).rstrip('/')
@@ -197,8 +178,15 @@ async def api_lnurluniversal(
     lnurluniversal_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    # Use centralized authorization check
-    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Check if user has access to this universal
+    if lnurluniversal.wallet != wallet.wallet.id:
+        user = await get_user(wallet.wallet.user)
+        if not user or lnurluniversal.wallet not in user.wallet_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
     
     # Add balance and comment count like the list endpoint
     balance = await get_lnurluniversal_balance(lnurluniversal_id)
@@ -238,7 +226,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    # Otherwise, use payment mode
    can_withdraw = (
        universal_balance_msat >= MIN_WITHDRAWABLE_MSAT and  # Has minimum withdrawable balance
-       actual_balance_msat >= (MIN_WITHDRAWABLE_MSAT + MIN_FEE_RESERVE_MSAT)  # Wallet can cover withdrawal + fees
+       actual_balance_msat >= MIN_WITHDRAWABLE_MSAT  # Wallet has enough balance
    )
    
    # Log the decision
@@ -282,10 +270,9 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        effective_max_msat = min(max_withdrawable_msat, universal_balance_msat)
        logging.info(f"After applying universal balance constraint: max = {effective_max_msat // 1000} sats")
        
-       # Then, ensure we don't exceed available wallet balance (with fee reserve)
-       available_wallet_balance = actual_balance_msat - MIN_FEE_RESERVE_MSAT
-       if effective_max_msat > available_wallet_balance:
-           effective_max_msat = max(0, available_wallet_balance)
+       # Then, ensure we don't exceed available wallet balance
+       if effective_max_msat > actual_balance_msat:
+           effective_max_msat = max(0, actual_balance_msat)
            logging.info(f"Further limiting withdrawal to {effective_max_msat // 1000} sats due to wallet balance")
        
        max_withdrawable_msat = effective_max_msat
@@ -464,25 +451,19 @@ async def api_withdraw_callback(
   )
 
   try:
-      # Check wallet balance to ensure we have enough for routing fees
+      # Check wallet balance to ensure we have enough
       from lnbits.core.crud import get_wallet
       wallet = await get_wallet(lnurluniversal.wallet)
       wallet_balance_msat = wallet.balance_msat
       
-      # Calculate routing fee reserve (now expects msats)
-      fee_reserve_msat = calculate_routing_fee_reserve(amount_msat)
-      total_needed_msat = amount_msat + fee_reserve_msat
+      logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat")
       
-      logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat, fee_reserve={fee_reserve_msat} msat, total_needed={total_needed_msat} msat")
-      
-      # The system requires at least 10 sats reserved for fees
-      
-      # Check if wallet has enough balance for withdrawal while leaving fee reserve
-      if wallet_balance_msat < amount_msat + MIN_FEE_RESERVE_MSAT:
-          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, required_reserve={MIN_FEE_RESERVE_MSAT}, universal_id={lnurluniversal_id}")
+      # Check if wallet has enough balance for withdrawal
+      if wallet_balance_msat < amount_msat:
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Insufficient balance. Need at least {MIN_FEE_RESERVE_MSAT // 1000} sats reserved for fees"
+              "reason": "Insufficient balance"
           }
       
       payment_hash = await pay_invoice(
@@ -533,7 +514,7 @@ async def api_withdraw_callback(
       if "no route" in error_msg:
           return {"status": "ERROR", "reason": "No route found. Try smaller amount"}
       elif "insufficient" in error_msg:
-          return {"status": "ERROR", "reason": "Lightning fees too high. Try 100+ sats"}
+          return {"status": "ERROR", "reason": "Insufficient balance"}
       elif "timeout" in error_msg:
           return {"status": "ERROR", "reason": "Payment timed out. Try again"}
       else:
@@ -553,9 +534,13 @@ async def api_lnurluniversal_update(
             status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
     
-    # Use centralized authorization check with direct ownership requirement
-    # Admin operations (UPDATE) require direct wallet ownership
-    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet, require_direct_ownership=True)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Admin operations require direct wallet ownership
+    if lnurluniversal.wallet != wallet.wallet.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Check for duplicate name if the name is being changed
     if lnurluniversal.name != data.name:
@@ -622,9 +607,13 @@ async def api_lnurluniversal_create(
 async def api_lnurluniversal_delete(
     lnurluniversal_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
-    # Use centralized authorization check with direct ownership requirement
-    # Admin operations (UPDATE) require direct wallet ownership
-    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet, require_direct_ownership=True)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Admin operations require direct wallet ownership
+    if lnurluniversal.wallet != wallet.wallet.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     await delete_lnurluniversal(lnurluniversal_id)
     return "", HTTPStatus.NO_CONTENT
@@ -644,8 +633,15 @@ async def api_lnurluniversal_create_invoice(
     memo: str = "",
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    # Use centralized authorization check
-    lnurluniversal = await check_universal_access(lnurluniversal_id, wallet)
+    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
+    if not lnurluniversal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Check if user has access to this universal
+    if lnurluniversal.wallet != wallet.wallet.id:
+        user = await get_user(wallet.wallet.user)
+        if not user or lnurluniversal.wallet not in user.wallet_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     # we create a payment and add some tags,
     # so tasks.py can grab the payment once its paid
@@ -674,8 +670,15 @@ async def api_get_comments(
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> list[dict]:
     """Get comments for a universal"""
-    # Use centralized authorization check
-    universal = await check_universal_access(universal_id, wallet)
+    universal = await get_lnurluniversal(universal_id)
+    if not universal:
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Check if user has access to this universal
+    if universal.wallet != wallet.wallet.id:
+        user = await get_user(wallet.wallet.user)
+        if not user or universal.wallet not in user.wallet_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     comments = await get_universal_comments(universal_id)
     return comments
