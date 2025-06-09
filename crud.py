@@ -17,18 +17,11 @@ async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     data.uses = 0
     
     try:
-        # Log the data being inserted
-        logger.info(f"Attempting to insert data: {data.dict()}")
-        
         # Use the pattern from withdraw extension
         await db.insert("lnurluniversal.maintable", data)
         
-        logger.info(f"Insert successful for id: {data.id}")
-        
     except Exception as e:
-        logger.error(f"Error during insert: {type(e).__name__}: {str(e)}")
-        logger.error(f"Data type: {type(data)}")
-        logger.error(f"Data dict: {data.dict()}")
+        logger.error(f"Error creating lnurluniversal {data.id}: {type(e).__name__}: {str(e)}")
         raise
     
     # Fetch and return the created record
@@ -62,19 +55,13 @@ async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
 async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
     """Get a single LnurlUniversal by ID."""
     try:
-        logger.info(f"Fetching lnurluniversal with id: {lnurluniversal_id}")
         row = await db.fetchone(
             "SELECT * FROM lnurluniversal.maintable WHERE id = :id", 
             {"id": lnurluniversal_id}
         )
-        logger.info(f"Fetched row: {row}")
         if row:
-            logger.info(f"Row type: {type(row)}")
-            result = LnurlUniversal(**row)
-            logger.info(f"Successfully created LnurlUniversal object")
-            return result
+            return LnurlUniversal(**row)
         else:
-            logger.info("No row found")
             return None
     except Exception as e:
         logger.error(f"Error in get_lnurluniversal: {type(e).__name__}: {str(e)}")
@@ -259,9 +246,6 @@ async def process_payment_with_lock(
     try:
         # Use the lock to ensure atomic operations
         async with lock:
-            logger.info(f"Acquired lock for {lnurluniversal_id}, processing {operation_type} with delta {amount_delta}")
-            
-            
             # For withdrawals, check balance first
             if amount_delta < 0:  # Withdrawal
                 current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
@@ -276,15 +260,8 @@ async def process_payment_with_lock(
                 increment_uses=increment_uses
             )
             
-            logger.info(f"Released lock for {lnurluniversal_id}, operation completed")
             return result
-    finally:
-        # Clean up lock if no longer needed (optional - helps with memory)
-        # Only clean up if there are many locks and this one is not in use
-        if len(payment_locks) > 100:  # Arbitrary threshold
-            try:
-                if not lock.locked():
-                    payment_locks.pop(lnurluniversal_id, None)
-            except:
-                pass  # Ignore any cleanup errors
+    except Exception as e:
+        logger.error(f"Error in update_balance_with_lock: {e}")
+        raise
 

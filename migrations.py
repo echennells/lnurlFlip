@@ -11,7 +11,6 @@ async def m001_initial(db):
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             wallet TEXT NOT NULL,
-            lnurlwithdrawamount_sat {db.big_int},
             selectedLnurlp TEXT NOT NULL,
             selectedLnurlw TEXT NOT NULL,
             total_msat {db.big_int} NOT NULL DEFAULT 0,

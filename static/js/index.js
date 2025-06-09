@@ -168,7 +168,6 @@ window.app = Vue.createApp({
       this.formDialog.data = {
         name: '',
         wallet: this.g.user.wallets[0]?.id || null,
-        lnurlwithdrawamount_sat: null,
         selectedLnurlp: null,
         selectedLnurlw: null
       }

@@ -36,7 +36,6 @@ async def wait_for_paid_invoices():
 # Do somethhing when an invoice related top this extension is paid
 
 async def on_invoice_paid(payment: Payment) -> None:
-    logger.info(f"Processing payment {payment.payment_hash[:8]}... amount: {payment.amount // 1000} sats")
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")
@@ -51,21 +50,16 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     # Check if this is a withdrawal
     is_withdrawal = payment.extra.get('lnurlwithdraw', False)
-    logger.info(f"Is withdrawal: {is_withdrawal}")
-    logger.info(f"Payment wallet_id: {payment.wallet_id}")
-    logger.info(f"Payment status: {payment.status}")
-    logger.info(f"Payment pending: {payment.pending}")
+    logger.debug(f"Payment details - withdrawal: {is_withdrawal}, wallet: {payment.wallet_id}, status: {payment.status}")
 
     # Calculate amount delta based on payment type
     # payment.amount is already in millisatoshis
     amount_msat = abs(payment.amount)
     if is_withdrawal:
         amount_delta = -amount_msat  # Make negative for withdrawals
-        logger.info(f"This is a withdrawal. Amount delta: {amount_delta} msats")
     else:
         # For incoming payments, amount is positive
         amount_delta = amount_msat
-        logger.info(f"This is an incoming payment. Amount delta: {amount_delta} msats")
 
     # Determine if we need to increment uses
     # This happens when a withdrawal brings the balance to exactly 0
@@ -74,7 +68,6 @@ async def on_invoice_paid(payment: Payment) -> None:
         current = await get_lnurluniversal(lnurluniversal_id)
         if current and current.total_msat + amount_delta == 0:
             increment_uses = True
-            logger.info("This withdrawal will bring balance to 0, incrementing uses")
 
     # Perform locked payment processing to prevent race conditions
     operation_type = "withdrawal" if is_withdrawal else "payment"
@@ -86,8 +79,7 @@ async def on_invoice_paid(payment: Payment) -> None:
     )
 
     if updated:
-        logger.info(f"After atomic update - total: {updated.total_msat}, uses: {getattr(updated, 'uses', 0)}")
+        operation = "withdrawal" if is_withdrawal else "payment"
+        logger.info(f"Processed {operation} for universal {lnurluniversal_id[:8]}... amount: {abs(amount_delta) // 1000} sats, new balance: {updated.total_msat // 1000} sats")
     else:
         logger.error(f"Failed to update universal {lnurluniversal_id}")
-    
-    logger.info(f"Payment {payment.payment_hash[:8]}... processed successfully")
