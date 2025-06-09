@@ -17,19 +17,18 @@ from .utils import sats_to_msats, msats_to_sats
 async def wait_for_paid_invoices():
     invoice_queue = asyncio.Queue()
     extension_name = "ext_lnurluniversal"
-    logger.warning(f"Starting invoice listener for extension: {extension_name}")  # Changed to warning for visibility
+    logger.info(f"Starting invoice listener for extension: {extension_name}")
     
     register_invoice_listener(invoice_queue, extension_name)
-    logger.warning("Invoice listener registered successfully")
+    logger.info("Invoice listener registered successfully")
     
     while True:
         try:
-            logger.warning("Waiting for next payment...")
             payment = await invoice_queue.get()
-            logger.warning(f"Received payment: {payment.checking_id}")
-            logger.warning(f"Payment extra data: {payment.extra}")
+            logger.info(f"Received payment: {payment.checking_id}")
             if payment.extra and isinstance(payment.extra, dict):
-                logger.warning(f"Payment tag: {payment.extra.get('tag')}")
+                logger.debug(f"Payment extra data: {payment.extra}")
+            
             await on_invoice_paid(payment)
         except Exception as e:
             logger.error(f"Error processing payment: {str(e)}")
@@ -38,12 +37,7 @@ async def wait_for_paid_invoices():
 # Do somethhing when an invoice related top this extension is paid
 
 async def on_invoice_paid(payment: Payment) -> None:
-    logger.info("-------- PAYMENT PROCESSING START --------")
-    logger.info(f"Processing payment in on_invoice_paid: {payment}")
-    logger.info(f"Payment extra data: {payment.extra}")
-    logger.info(f"Payment amount: {payment.amount} msats ({msats_to_sats(payment.amount)} sats)")
-    logger.info(f"Payment tag: {payment.extra.get('tag') if payment.extra else 'No tag'}")
-    logger.info(f"Payment hash: {payment.payment_hash}")
+    logger.info(f"Processing payment {payment.payment_hash[:8]}... amount: {msats_to_sats(payment.amount)} sats")
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")
@@ -73,13 +67,6 @@ async def on_invoice_paid(payment: Payment) -> None:
         # For incoming payments, amount is positive
         amount_delta = amount_msat
         logger.info(f"This is an incoming payment. Amount delta: {amount_delta} msats")
-        
-        # Check if the total has already been updated for incoming payments
-        # This prevents double-processing
-        current = await get_lnurluniversal(lnurluniversal_id)
-        if current and current.total_msat >= amount_msat:
-            logger.info(f"Total already updated. Current total: {current.total_msat} msats, Amount: {amount_msat} msats")
-            return
 
     # Determine if we need to increment uses
     # This happens when a withdrawal brings the balance to exactly 0
@@ -100,7 +87,8 @@ async def on_invoice_paid(payment: Payment) -> None:
     )
 
     if updated:
-        logger.info(f"After atomic update - total: {updated.total_msat}, state: {updated.state}, uses: {getattr(updated, 'uses', 0)}")
+        logger.info(f"After atomic update - total: {updated.total_msat}, uses: {getattr(updated, 'uses', 0)}")
     else:
         logger.error(f"Failed to update universal {lnurluniversal_id}")
-    logger.info("-------- PAYMENT PROCESSING END --------")
+    
+    logger.info(f"Payment {payment.payment_hash[:8]}... processed successfully")

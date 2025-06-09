@@ -261,6 +261,7 @@ async def process_payment_with_lock(
         async with lock:
             logger.info(f"Acquired lock for {lnurluniversal_id}, processing {operation_type} with delta {amount_delta}")
             
+            
             # For withdrawals, check balance first
             if amount_delta < 0:  # Withdrawal
                 current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
