@@ -3,12 +3,8 @@ from lnbits.db import Database
 from .models import LnurlUniversal
 from fastapi import HTTPException
 from loguru import logger
-import asyncio
 
 db = Database("ext_lnurluniversal")
-
-# Lock manager for payment operations to prevent race conditions
-payment_locks = {}
 
 async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
     """Create a new LnurlUniversal record."""
@@ -225,8 +221,8 @@ async def process_payment_with_lock(
     operation_type: str = "payment"
 ) -> Optional[LnurlUniversal]:
     """
-    Process payment operations with proper locking to prevent race conditions.
-    This ensures that concurrent operations on the same universal are serialized.
+    Process payment operations atomically.
+    The database handles concurrency through atomic operations.
     
     Args:
         lnurluniversal_id: The ID of the universal to update
@@ -237,31 +233,23 @@ async def process_payment_with_lock(
     Returns:
         The updated LnurlUniversal object or None if not found
     """
-    # Get or create a lock for this universal
-    if lnurluniversal_id not in payment_locks:
-        payment_locks[lnurluniversal_id] = asyncio.Lock()
-    
-    lock = payment_locks[lnurluniversal_id]
-    
     try:
-        # Use the lock to ensure atomic operations
-        async with lock:
-            # For withdrawals, check balance first
-            if amount_delta < 0:  # Withdrawal
-                current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
-                if current_balance < abs(amount_delta):
-                    logger.error(f"Insufficient balance for withdrawal: {current_balance} < {abs(amount_delta)}")
-                    raise HTTPException(status_code=400, detail="Insufficient balance")
-            
-            # Perform the atomic update
-            result = await update_lnurluniversal_atomic(
-                lnurluniversal_id=lnurluniversal_id,
-                amount_delta=amount_delta,
-                increment_uses=increment_uses
-            )
-            
-            return result
+        # For withdrawals, check balance first
+        if amount_delta < 0:  # Withdrawal
+            current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+            if current_balance < abs(amount_delta):
+                logger.error(f"Insufficient balance for withdrawal: {current_balance} < {abs(amount_delta)}")
+                raise HTTPException(status_code=400, detail="Insufficient balance")
+        
+        # Perform the atomic update - database handles concurrency
+        result = await update_lnurluniversal_atomic(
+            lnurluniversal_id=lnurluniversal_id,
+            amount_delta=amount_delta,
+            increment_uses=increment_uses
+        )
+        
+        return result
     except Exception as e:
-        logger.error(f"Error in update_balance_with_lock: {e}")
+        logger.error(f"Error in process_payment_with_lock: {e}")
         raise
 

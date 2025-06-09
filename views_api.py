@@ -483,20 +483,10 @@ async def api_withdraw_callback(
           """,
           {"payment_request": pr}
       )
-      # Return LNURL-compliant error response with better error messages
-      error_msg = str(e).lower()
+      # Log full error for debugging
       logger.error(f"Withdrawal failed: {str(e)} universal_id={lnurluniversal_id} amount_msat={amount_msat}")
-      
-      if "no route" in error_msg:
-          return {"status": "ERROR", "reason": "No route found. Try smaller amount"}
-      elif "insufficient" in error_msg:
-          return {"status": "ERROR", "reason": "Insufficient balance"}
-      elif "timeout" in error_msg:
-          return {"status": "ERROR", "reason": "Payment timed out. Try again"}
-      else:
-          # Log full error but return simple message
-          logger.error(f"Unexpected withdrawal error: {str(e)}")
-          return {"status": "ERROR", "reason": "Payment failed. Try again"}
+      # Return simple LNURL-compliant error response
+      return {"status": "ERROR", "reason": "Payment failed"}
 
 
 @lnurluniversal_api_router.put("/api/v1/myex/{lnurluniversal_id}")
