@@ -5,7 +5,6 @@ from lnbits.tasks import register_invoice_listener
 from loguru import logger
 
 from .crud import get_lnurluniversal, process_payment_with_lock
-from .utils import sats_to_msats, msats_to_sats
 
 #######################################
 ########## RUN YOUR TASKS HERE ########
@@ -37,7 +36,7 @@ async def wait_for_paid_invoices():
 # Do somethhing when an invoice related top this extension is paid
 
 async def on_invoice_paid(payment: Payment) -> None:
-    logger.info(f"Processing payment {payment.payment_hash[:8]}... amount: {msats_to_sats(payment.amount)} sats")
+    logger.info(f"Processing payment {payment.payment_hash[:8]}... amount: {payment.amount // 1000} sats")
 
     # Get the universal ID
     lnurluniversal_id = payment.extra.get("universal_id")

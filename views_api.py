@@ -38,7 +38,6 @@ from .crud import (
     process_payment_with_lock,
     db
 )
-from .utils import sats_to_msats, msats_to_sats
 from .models import CreateLnurlUniversalData, LnurlUniversal
 from .utils import get_withdraw_link_info, check_universal_access
 import time
@@ -59,8 +58,8 @@ async def create_payment_response(request: Request, lnurluniversal_id: str, pay_
     return {
         "tag": "payRequest",
         "callback": callback_url,
-        "minSendable": sats_to_msats(int(pay_link.min)),
-        "maxSendable": sats_to_msats(int(pay_link.max)),
+        "minSendable": int(pay_link.min) * 1000,
+        "maxSendable": int(pay_link.max) * 1000,
         "metadata": f'[["text/plain", "{pay_link.description}"]]'
     }
 
@@ -226,13 +225,13 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
 
    # Get balance information (all balances in msats for consistency)
    universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
-   logging.info(f"Universal balance: {universal_balance_msat} msats ({msats_to_sats(universal_balance_msat)} sats)")
+   logging.info(f"Universal balance: {universal_balance_msat} msats ({universal_balance_msat // 1000} sats)")
 
    # Check actual wallet balance
    from lnbits.core.crud import get_wallet
    wallet = await get_wallet(lnurluniversal.wallet)
    actual_balance_msat = wallet.balance_msat
-   logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({msats_to_sats(actual_balance_msat)} sats)")
+   logging.info(f"LNbits wallet balance: {actual_balance_msat} msats ({actual_balance_msat // 1000} sats)")
 
    # Simplified state determination logic:
    # Use withdraw mode only if we have sufficient balance
@@ -244,9 +243,9 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
    
    # Log the decision
    if can_withdraw:
-       logging.info(f"Can withdraw: universal balance {msats_to_sats(universal_balance_msat)} sats, wallet balance {msats_to_sats(actual_balance_msat)} sats")
+       logging.info(f"Can withdraw: universal balance {universal_balance_msat // 1000} sats, wallet balance {actual_balance_msat // 1000} sats")
    else:
-       logging.info(f"Cannot withdraw: universal balance {msats_to_sats(universal_balance_msat)} sats, wallet balance {msats_to_sats(actual_balance_msat)} sats")
+       logging.info(f"Cannot withdraw: universal balance {universal_balance_msat // 1000} sats, wallet balance {actual_balance_msat // 1000} sats")
    
    # Generate appropriate response based on withdrawal capability
    if not can_withdraw:
@@ -273,25 +272,25 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        ))
        
        # Use withdraw link's configured limits (converting from sats to msats)
-       min_withdrawable_msat = sats_to_msats(withdraw_info["min_withdrawable"])
-       max_withdrawable_msat = sats_to_msats(withdraw_info["max_withdrawable"])
+       min_withdrawable_msat = withdraw_info["min_withdrawable"] * 1000
+       max_withdrawable_msat = withdraw_info["max_withdrawable"] * 1000
        
-       logging.info(f"Withdraw link configured limits - min: {msats_to_sats(min_withdrawable_msat)} sats, max: {msats_to_sats(max_withdrawable_msat)} sats")
+       logging.info(f"Withdraw link configured limits - min: {min_withdrawable_msat // 1000} sats, max: {max_withdrawable_msat // 1000} sats")
        
        # Apply constraints: universal balance and wallet balance
        # First, limit to universal balance
        effective_max_msat = min(max_withdrawable_msat, universal_balance_msat)
-       logging.info(f"After applying universal balance constraint: max = {msats_to_sats(effective_max_msat)} sats")
+       logging.info(f"After applying universal balance constraint: max = {effective_max_msat // 1000} sats")
        
        # Then, ensure we don't exceed available wallet balance (with fee reserve)
        available_wallet_balance = actual_balance_msat - MIN_FEE_RESERVE_MSAT
        if effective_max_msat > available_wallet_balance:
            effective_max_msat = max(0, available_wallet_balance)
-           logging.info(f"Further limiting withdrawal to {msats_to_sats(effective_max_msat)} sats due to wallet balance")
+           logging.info(f"Further limiting withdrawal to {effective_max_msat // 1000} sats due to wallet balance")
        
        max_withdrawable_msat = effective_max_msat
        
-       logging.info(f"Final withdraw limits - min: {msats_to_sats(min_withdrawable_msat)} sats, max: {msats_to_sats(max_withdrawable_msat)} sats")
+       logging.info(f"Final withdraw limits - min: {min_withdrawable_msat // 1000} sats, max: {max_withdrawable_msat // 1000} sats")
        
        return {
            "tag": "withdrawRequest",
@@ -356,14 +355,14 @@ async def api_lnurl_callback(
         )
 
     # Log invoice creation details
-    logger.info(f"Creating invoice - Amount requested: {amount} msats ({msats_to_sats(amount)} sats)")
+    logger.info(f"Creating invoice - Amount requested: {amount} msats ({amount // 1000} sats)")
     logger.info(f"Invoice wallet: {pay_link.wallet}")
     logger.info(f"Invoice memo: {pay_link.description}{' - ' + comment if comment else ''}")
     
     try:
         payment = await create_invoice(
             wallet_id=pay_link.wallet,
-            amount=msats_to_sats(amount),  # Convert from msats to sats for invoice creation
+            amount=amount // 1000,  # Convert from msats to sats for invoice creation
             memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
             extra={
                 "tag": "ext_lnurluniversal",
@@ -385,7 +384,7 @@ async def api_lnurl_callback(
     # Do not update balance here - it will be updated when payment is confirmed in tasks.py
     current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
     
-    logger.info(f"Created invoice for universal {lnurluniversal_id}: payment_hash={payment.payment_hash}, amount={msats_to_sats(amount)} sats")
+    logger.info(f"Created invoice for universal {lnurluniversal_id}: payment_hash={payment.payment_hash}, amount={amount // 1000} sats")
     logger.info(f"Invoice extra data: {payment.extra}")
     
     # Decode and log invoice details for debugging
@@ -434,17 +433,17 @@ async def api_withdraw_callback(
   available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)  # Balance in msats
 
   # Check against withdraw link limits
-  min_withdrawable_msat = sats_to_msats(withdraw_info["min_withdrawable"])
-  max_withdrawable_msat = sats_to_msats(withdraw_info["max_withdrawable"])
+  min_withdrawable_msat = withdraw_info["min_withdrawable"] * 1000
+  max_withdrawable_msat = withdraw_info["max_withdrawable"] * 1000
   
   # Apply the same constraint as in the initial request: limit to universal balance
   effective_max_msat = min(max_withdrawable_msat, available_balance_msat)
   
   if amount_msat < min_withdrawable_msat:
-      return {"status": "ERROR", "reason": f"Amount below minimum: {msats_to_sats(min_withdrawable_msat)} sats"}
+      return {"status": "ERROR", "reason": f"Amount below minimum: {min_withdrawable_msat // 1000} sats"}
   
   if amount_msat > effective_max_msat:
-      return {"status": "ERROR", "reason": f"Amount exceeds maximum: {msats_to_sats(effective_max_msat)} sats"}
+      return {"status": "ERROR", "reason": f"Amount exceeds maximum: {effective_max_msat // 1000} sats"}
 
   if amount_msat > available_balance_msat:
       return {"status": "ERROR", "reason": "Insufficient balance for withdrawal"}
@@ -483,7 +482,7 @@ async def api_withdraw_callback(
           logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, required_reserve={MIN_FEE_RESERVE_MSAT}, universal_id={lnurluniversal_id}")
           return {
               "status": "ERROR", 
-              "reason": f"Insufficient balance. Need at least {msats_to_sats(MIN_FEE_RESERVE_MSAT)} sats reserved for fees"
+              "reason": f"Insufficient balance. Need at least {MIN_FEE_RESERVE_MSAT // 1000} sats reserved for fees"
           }
       
       payment_hash = await pay_invoice(
