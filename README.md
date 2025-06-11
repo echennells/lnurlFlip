@@ -1,21 +1,47 @@
-`The README.md typically serves as a guide for using the extension.`
-
 # LnurlFlip - An [LNbits](https://github.com/lnbits/lnbits) Extension
 
-## A Starter Template for Your Own Extension
+## Overview
 
-Ready to start hacking? Once you've forked this extension, you can incorporate functions from other extensions as needed.
+LnurlFlip creates a single LNURL that intelligently switches between payment and withdrawal modes based on the current balance. Share one QR code that can both receive payments when empty and allow withdrawals when funded.
 
-### How to Use This Template
+## How It Works
 
-> This guide assumes you're using this extension as a base for a new one, and have installed LNbits using https://github.com/lnbits/lnbits/blob/main/docs/guide/installation.md#option-1-recommended-poetry.
+- **Payment Mode**: When balance is below 50 sats, shows payment interface
+- **Withdrawal Mode**: When balance is sufficient, shows withdrawal interface  
+- **Automatic Switching**: Mode changes dynamically based on real-time balance
 
-1. Install and enable the extension either through the official LNbits manifest or by adding https://raw.githubusercontent.com/lnbits/lnurlFlip/main/manifest.json to `"Server"/"Server"/"Extension Sources"`. ![Extension Sources](https://i.imgur.com/MUGwAU3.png) ![image](https://github.com/lnbits/lnurlFlip/assets/33088785/4133123b-c747-4458-ba6c-5cc7c0f124d8)
+## Features
 
-2. `Ctrl c` shut down your LNbits installation.
-3. Download the extension files from https://github.com/lnbits/lnurlFlip to a folder outside of `/lnbits`, and initialize the folder with `git`. Alternatively, create a repo, copy the lnurlFlip extension files into it, then `git clone` the extension to a location outside of `/lnbits`.
-4. Remove the installed extension from `lnbits/lnbits/extensions`.
-5. Create a symbolic link using `ln -s /home/ben/Projects/<name of your extension> /home/ben/Projects/lnbits/lnbits/extensions`.
-6. Restart your LNbits installation. You can now modify your extension and `git push` changes to a repo.
-7. When you're ready to share your manifest so others can install it, edit `/lnbits/lnurlFlip/manifest.json` to include the git credentials of your extension.
-8. IMPORTANT: If you want your extension to be added to the official LNbits manifest, please follow the guidelines here: https://github.com/lnbits/lnbits-extensions#important
+- ✨ Single QR code for both payments and withdrawals
+- 💬 Comment support for payments
+- 📊 Transaction history and usage stats
+
+## Installation
+
+### From Extension Manifest
+1. In LNbits, go to **Server** → **Extensions** → **Extension Sources**
+2. Add: `https://raw.githubusercontent.com/echennells/lnurlFlip/main/manifest.json`
+3. Enable the LnurlFlip extension
+
+## Setup
+
+### Step 1: Create Required Links
+Before creating a flip link, you need:
+
+1. **LNURL Pay link** (from LNURLp extension)
+   - Set your desired payment amount range
+   
+2. **LNURL Withdraw link** (from Withdraw extension)  
+   - Set minimum and maximum withdrawal amounts
+
+### Step 2: Create Your Flip Link
+1. Go to LnurlFlip extension
+2. Click **"New LnurlFlip"**
+3. Enter a name and select your wallet
+4. Choose your existing pay and withdraw links
+5. Click **"Create LnurlFlip"**
+
+### Step 3: Share Your Link
+1. Click the QR code icon next to your flip link
+2. Share the QR code or LNURL string
+3. The link automatically switches between payment and withdrawal modes
