@@ -74,7 +74,7 @@ window.app = Vue.createApp({
       try {
         const response = await LNbits.api.request(
           'GET',
-          '/lnurlFlip/api/v1/myex?all_wallets=true',
+          '/lnurlFlip/api/v1/lnurlflip?all_wallets=true',
           this.g.user.wallets[0].inkey
         )
         
@@ -196,7 +196,7 @@ window.app = Vue.createApp({
       LNbits.api
         .request(
           'PUT',
-          '/lnurlFlip/api/v1/myex/' + data.id,
+          '/lnurlFlip/api/v1/lnurlflip/' + data.id,
           wallet.adminkey,
           data
         )
@@ -213,7 +213,7 @@ window.app = Vue.createApp({
 
     createFlip(wallet, data) {
       LNbits.api
-        .request('POST', '/lnurlFlip/api/v1/myex', wallet.adminkey, data)
+        .request('POST', '/lnurlFlip/api/v1/lnurlflip', wallet.adminkey, data)
         .then(response => {
           this.getFlips()
           this.formDialog.show = false
@@ -239,7 +239,7 @@ window.app = Vue.createApp({
       this.formDialog.show = true
     },
 
-    async deleteUniversal(flipId) {
+    async deleteFlip(flipId) {
       const flip = this.flips.find(u => u.id === flipId)
       if (!flip) return
 
@@ -249,7 +249,7 @@ window.app = Vue.createApp({
           try {
             await LNbits.api.request(
               'DELETE',
-              `/lnurlFlip/api/v1/myex/${flipId}`,
+              `/lnurlFlip/api/v1/lnurlflip/${flipId}`,
               this.g.user.wallets[0].adminkey
             )
             

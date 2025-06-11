@@ -65,7 +65,7 @@ async def create_payment_response(request: Request, lnurlflip_id: str, pay_link)
 
 ## Get all the records belonging to the user
 
-@lnurlFlip_api_router.get("/api/v1/myex/lnurlp_links")
+@lnurlFlip_api_router.get("/api/v1/lnurlflip/lnurlp_links")
 async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_key)):
     try:
         from lnbits.extensions.lnurlp.crud import get_pay_links
@@ -97,7 +97,7 @@ async def api_get_withdraw_link(withdraw_id: str, user: User = Depends(check_use
         raise HTTPException(status_code=404, detail="Not found")
     return withdraw_info
 
-@lnurlFlip_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
+@lnurlFlip_api_router.get("/api/v1/lnurlflip", status_code=HTTPStatus.OK)
 async def api_lnurlFlips(
     all_wallets: bool = Query(False),
     wallet: WalletTypeInfo = Depends(require_invoice_key),
@@ -170,7 +170,7 @@ async def api_get_lnurl(
 
 
 @lnurlFlip_api_router.get(
-    "/api/v1/myex/{lnurlflip_id}",
+    "/api/v1/lnurlflip/{lnurlflip_id}",
     status_code=HTTPStatus.OK,
 )
 async def api_lnurlFlip(
@@ -488,7 +488,7 @@ async def api_withdraw_callback(
       return {"status": "ERROR", "reason": "Payment failed"}
 
 
-@lnurlFlip_api_router.put("/api/v1/myex/{lnurlflip_id}")
+@lnurlFlip_api_router.put("/api/v1/lnurlflip/{lnurlflip_id}")
 async def api_lnurlFlip_update(
     data: CreateLnurlFlipData,
     lnurlflip_id: str,
@@ -525,7 +525,7 @@ async def api_lnurlFlip_update(
 
 ## Create a new record
 
-@lnurlFlip_api_router.post("/api/v1/myex", status_code=HTTPStatus.CREATED)
+@lnurlFlip_api_router.post("/api/v1/lnurlflip", status_code=HTTPStatus.CREATED)
 async def api_lnurlflip_create(
     request: Request,
     data: CreateLnurlFlipData,
@@ -541,7 +541,7 @@ async def api_lnurlflip_create(
         )
     
     lnurlflip_id = urlsafe_short_hash()
-    myext = LnurlFlip(
+    lnurlflip = LnurlFlip(
         id=lnurlflip_id,
         name=data.name,
         wallet=data.wallet,
@@ -551,7 +551,7 @@ async def api_lnurlflip_create(
         uses=0    # Initialize uses to 0
     )
 
-    created_lnurlflip = await create_lnurlflip(myext)
+    created_lnurlflip = await create_lnurlflip(lnurlflip)
     
     # Fetch the created LnurlFlip to ensure all fields are populated
     fetched_lnurlflip = await get_lnurlFlip(created_lnurlflip.id)
@@ -561,7 +561,7 @@ async def api_lnurlflip_create(
 
 
 ## Delete a record
-@lnurlFlip_api_router.delete("/api/v1/myex/{lnurlflip_id}")
+@lnurlFlip_api_router.delete("/api/v1/lnurlflip/{lnurlflip_id}")
 async def api_lnurlflip_delete(
     lnurlflip_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
@@ -583,7 +583,7 @@ async def api_lnurlflip_delete(
 
 
 @lnurlFlip_api_router.post(
-    "/api/v1/myex/payment/{lnurlflip_id}", status_code=HTTPStatus.CREATED
+    "/api/v1/lnurlflip/payment/{lnurlflip_id}", status_code=HTTPStatus.CREATED
 )
 async def api_lnurlflip_create_invoice(
     lnurlflip_id: str, 
