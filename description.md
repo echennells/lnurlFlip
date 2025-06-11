@@ -1,10 +1,23 @@
-LnurlFlip can be used as a template for building new extensions, it includes a bunch of functions that can be edited/deleted as you need them.
+# LnurlFlip
 
-This is a longform description that will be used in the advanced description when users click on the "more" button on the extension cards.
+Creates a single LNURL that automatically switches between payment and withdrawal modes based on balance.
 
-Adding some bullets is nice covering:
+## How It Works
 
-- Functionality
-- Use cases
+- Combines existing LNURL Pay and LNURL Withdraw links
+- Shows payment interface when balance is low
+- Shows withdrawal interface when balance is sufficient
+- Automatically switches based on available funds
 
-...and some other text about just how great this etension is.
+## Features
+
+- Single QR code for both payments and withdrawals
+- Real-time balance tracking
+- Comment support
+- Transaction history
+
+## Setup
+
+1. Create LNURL Pay and LNURL Withdraw links
+2. Create LnurlFlip linking both
+3. Share the QR code

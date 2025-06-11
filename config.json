@@ -1,42 +1,18 @@
 {
-  "name": "LnurlFlip",
-  "short_description": "Minimal extension to build on",
-  "tile": "/lnurlFlip/static/image/lnurlFlip.png",
-  "min_lnbits_version": "0.12.5",
+  "name": "lnurlFlip",
+  "version": "0.1",
+  "short_description": "LnurlFlip creates a single LNURL that automatically switches between accepting payments and allowing withdrawals based on the current balance.",
+  "icon": "static/image/lnurlFlip.png",
+  "code": "lnurlFlip",
+  "min_lnbits_version": "1.0.0",
   "contributors": [
     {
-      "name": "Alan Bits",
-      "uri": "https://github.com/alanbits",
-      "role": "Lead dev"
-    },
-    {
-      "name": "Ben Arc",
-      "uri": "https://github.com/arcbtc",
-      "role": "Dev"
-    },
-    {
-      "name": "LNbits community",
-      "uri": "https://t.me/lnbits",
-      "role": "Emotional support"
+      "name": "Eric Chennells",
+      "uri": "https://github.com/echennells",
+      "role": "Contributor"
     }
   ],
-  "images": [
-    {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/1.png",
-      "link": "https://www.youtube.com/embed/SkkIwO_X4i4?si=9JJh1Fc6GfHDZK6b"
-    },
-    {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/2.png"
-    },
-    {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/3.png"
-    }
-  ],
-  "description_md": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/description.md",
-  "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/toc.md",
-  "license": "MIT",
-  "dependencies": [
-    "withdraw",
-    "lnurlp"
-  ]
+  "description_md": "https://raw.githubusercontent.com/echennells/lnurlFlip/main/description.md",
+  "license": "MIT"
+    
 }
