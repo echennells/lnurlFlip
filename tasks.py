@@ -4,7 +4,7 @@ from lnbits.core.models import Payment
 from lnbits.tasks import register_invoice_listener
 from loguru import logger
 
-from .crud import get_lnurluniversal, process_payment_with_lock
+from .crud import get_lnurlFlip, process_payment_with_lock
 
 #######################################
 ########## RUN YOUR TASKS HERE ########
@@ -15,7 +15,7 @@ from .crud import get_lnurluniversal, process_payment_with_lock
 
 async def wait_for_paid_invoices():
     invoice_queue = asyncio.Queue()
-    extension_name = "ext_lnurluniversal"
+    extension_name = "ext_lnurlflip"
     logger.info(f"Starting invoice listener for extension: {extension_name}")
     
     register_invoice_listener(invoice_queue, extension_name)
@@ -37,15 +37,15 @@ async def wait_for_paid_invoices():
 
 async def on_invoice_paid(payment: Payment) -> None:
 
-    # Get the universal ID
-    lnurluniversal_id = payment.extra.get("universal_id")
-    if not lnurluniversal_id:
-        logger.warning(f"Payment missing universal_id: {payment}")
+    # Get the flip ID
+    lnurlflip_id = payment.extra.get("flip_id")
+    if not lnurlflip_id:
+        logger.warning(f"Payment missing flip_id: {payment}")
         return
 
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        logger.error(f"Universal not found for id: {lnurluniversal_id}")
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
+    if not lnurlflip:
+        logger.error(f"Flip not found for id: {lnurlflip_id}")
         return
 
     # Check if this is a withdrawal
@@ -65,14 +65,14 @@ async def on_invoice_paid(payment: Payment) -> None:
     # This happens when a withdrawal brings the balance to exactly 0
     increment_uses = False
     if is_withdrawal:
-        current = await get_lnurluniversal(lnurluniversal_id)
+        current = await get_lnurlFlip(lnurlflip_id)
         if current and current.total_msat + amount_delta == 0:
             increment_uses = True
 
     # Perform locked payment processing to prevent race conditions
     operation_type = "withdrawal" if is_withdrawal else "payment"
     updated = await process_payment_with_lock(
-        lnurluniversal_id=lnurluniversal_id,
+        lnurlflip_id=lnurlflip_id,
         amount_delta=amount_delta,
         increment_uses=increment_uses,
         operation_type=operation_type
@@ -80,6 +80,6 @@ async def on_invoice_paid(payment: Payment) -> None:
 
     if updated:
         operation = "withdrawal" if is_withdrawal else "payment"
-        logger.info(f"Processed {operation} for universal {lnurluniversal_id[:8]}... amount: {abs(amount_delta) // 1000} sats, new balance: {updated.total_msat // 1000} sats")
+        logger.info(f"Processed {operation} for flip {lnurlflip_id[:8]}... amount: {abs(amount_delta) // 1000} sats, new balance: {updated.total_msat // 1000} sats")
     else:
-        logger.error(f"Failed to update universal {lnurluniversal_id}")
+        logger.error(f"Failed to update flip {lnurlflip_id}")

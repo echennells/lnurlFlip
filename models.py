@@ -5,14 +5,14 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class CreateLnurlUniversalData(BaseModel):
+class CreateLnurlFlipData(BaseModel):
     name: str
     wallet: Optional[str] = None
     selectedLnurlp: str
     selectedLnurlw: str
 
 
-class LnurlUniversal(BaseModel):
+class LnurlFlip(BaseModel):
     id: str
     name: str
     wallet: str

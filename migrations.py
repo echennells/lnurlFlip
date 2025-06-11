@@ -1,4 +1,4 @@
-# Migration file for lnurluniversal extension
+# Migration file for lnurlFlip extension
 
 async def m001_initial(db):
     """
@@ -7,7 +7,7 @@ async def m001_initial(db):
     # Create main table
     await db.execute(
         f"""
-        CREATE TABLE lnurluniversal.maintable (
+        CREATE TABLE {db.references_schema}maintable (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             wallet TEXT NOT NULL,
@@ -22,9 +22,9 @@ async def m001_initial(db):
     # Create pending withdrawals table
     await db.execute(
         f"""
-        CREATE TABLE lnurluniversal.pending_withdrawals (
+        CREATE TABLE {db.references_schema}pending_withdrawals (
             id TEXT PRIMARY KEY,
-            universal_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
+            flip_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
             amount_msat {db.big_int} NOT NULL,
             status TEXT DEFAULT 'pending',
             created_time {db.big_int} NOT NULL,
@@ -36,9 +36,9 @@ async def m001_initial(db):
     # Create invoice comments table
     await db.execute(
         f"""
-        CREATE TABLE lnurluniversal.invoice_comments (
+        CREATE TABLE {db.references_schema}invoice_comments (
             id TEXT PRIMARY KEY,
-            universal_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
+            flip_id TEXT NOT NULL REFERENCES {db.references_schema}maintable (id),
             comment TEXT NOT NULL,
             timestamp {db.big_int} NOT NULL,
             amount_msat {db.big_int} NOT NULL
@@ -48,11 +48,11 @@ async def m001_initial(db):
     
     # Create indexes
     await db.execute(
-        "CREATE INDEX idx_pending_withdrawals_universal_id ON lnurluniversal.pending_withdrawals(universal_id)"
+        f"CREATE INDEX idx_pending_withdrawals_flip_id ON {db.references_schema}pending_withdrawals(flip_id)"
     )
     await db.execute(
-        "CREATE INDEX idx_pending_withdrawals_status ON lnurluniversal.pending_withdrawals(status)"
+        f"CREATE INDEX idx_pending_withdrawals_status ON {db.references_schema}pending_withdrawals(status)"
     )
     await db.execute(
-        "CREATE INDEX idx_invoice_comments_universal_id ON lnurluniversal.invoice_comments(universal_id)"
+        f"CREATE INDEX idx_invoice_comments_flip_id ON {db.references_schema}invoice_comments(flip_id)"
     )

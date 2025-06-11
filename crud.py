@@ -1,71 +1,71 @@
 from typing import Optional, Union, List
 from lnbits.db import Database
-from .models import LnurlUniversal
+from .models import LnurlFlip
 from fastapi import HTTPException
 from loguru import logger
 
-db = Database("ext_lnurluniversal")
+db = Database("ext_lnurlFlip")
 
-async def create_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
-    """Create a new LnurlUniversal record."""
+async def create_lnurlflip(data: LnurlFlip) -> LnurlFlip:
+    """Create a new LnurlFlip record."""
     # Ensure fields are initialized with valid values
     data.total_msat = 0
     data.uses = 0
     
     try:
         # Use the pattern from withdraw extension
-        await db.insert("lnurluniversal.maintable", data)
+        await db.insert("maintable", data)
         
     except Exception as e:
-        logger.error(f"Error creating lnurluniversal {data.id}: {type(e).__name__}: {str(e)}")
+        logger.error(f"Error creating lnurlFlip {data.id}: {type(e).__name__}: {str(e)}")
         raise
     
     # Fetch and return the created record
-    return await get_lnurluniversal(data.id)
+    return await get_lnurlFlip(data.id)
 
-async def get_lnurluniversal_balance(lnurluniversal_id: str) -> int:
+async def get_lnurlflip_balance(lnurlflip_id: str) -> int:
     """Get the balance from record and subtract pending withdrawals
     
     Returns:
         The available balance in millisatoshis (msats)
     """
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
+    flip = await get_lnurlFlip(lnurlflip_id)
+    if not flip:
         return None
     
     # Get pending withdrawals
     pending = await db.fetchone(
         """
         SELECT COALESCE(SUM(amount_msat), 0) as total
-        FROM lnurluniversal.pending_withdrawals
-        WHERE universal_id = :universal_id
+        FROM pending_withdrawals
+        WHERE flip_id = :flip_id
         AND status = 'pending'
         """,
-        {"universal_id": lnurluniversal_id}
+        {"flip_id": lnurlflip_id}
     )
     pending_amount_msat = pending["total"] if pending else 0
-    # Note: universal.total_msat is in msats, pending_amount_msat is now also in msats
-    available_balance_msat = max(0, universal.total_msat - pending_amount_msat)
+    # Note: flip.total_msat is in msats, pending_amount_msat is now also in msats
+    available_balance_msat = max(0, flip.total_msat - pending_amount_msat)
     return available_balance_msat
 
-async def get_lnurluniversal(lnurluniversal_id: str) -> Optional[LnurlUniversal]:
-    """Get a single LnurlUniversal by ID."""
+async def get_lnurlFlip(lnurlflip_id: str) -> Optional[LnurlFlip]:
+    """Get a single LnurlFlip by ID."""
     try:
         row = await db.fetchone(
-            "SELECT * FROM lnurluniversal.maintable WHERE id = :id", 
-            {"id": lnurluniversal_id}
+            "SELECT * FROM maintable WHERE id = :id", 
+            {"id": lnurlflip_id}
         )
         if row:
-            return LnurlUniversal(**row)
+            return LnurlFlip(**row)
         else:
             return None
     except Exception as e:
-        logger.error(f"Error in get_lnurluniversal: {type(e).__name__}: {str(e)}")
+        logger.error(f"Error in get_lnurlFlip: {type(e).__name__}: {str(e)}")
         logger.error(f"Row data: {row if 'row' in locals() else 'Not fetched'}")
         raise
 
-async def get_lnurluniversals(wallet_ids: Union[str, List[str]]) -> List[LnurlUniversal]:
-    """Get all LnurlUniversals for given wallet IDs."""
+async def get_lnurlFlips(wallet_ids: Union[str, List[str]]) -> List[LnurlFlip]:
+    """Get all LnurlFlips for given wallet IDs."""
     if isinstance(wallet_ids, str):
         wallet_ids = [wallet_ids]
     
@@ -85,52 +85,52 @@ async def get_lnurluniversals(wallet_ids: Union[str, List[str]]) -> List[LnurlUn
         values[key] = wallet_id
     
     # Use parameterized query with individually named placeholders
-    query = f"SELECT * FROM lnurluniversal.maintable WHERE wallet IN ({','.join(placeholders)})"
+    query = f"SELECT * FROM maintable WHERE wallet IN ({','.join(placeholders)})"
     
     rows = await db.fetchall(
         query,
         values,
-        LnurlUniversal
+        LnurlFlip
     )
     return rows
 
-async def update_lnurluniversal(data: LnurlUniversal) -> LnurlUniversal:
-    """Update an existing LnurlUniversal."""
-    logger.info(f"Updating lnurluniversal: {data.id}")
+async def update_lnurlFlip(data: LnurlFlip) -> LnurlFlip:
+    """Update an existing LnurlFlip."""
+    logger.info(f"Updating lnurlFlip: {data.id}")
     
     await db.update(
-        "lnurluniversal.maintable", 
+        "maintable", 
         data,
         "WHERE id = :id"
     )
     
     return data
 
-async def delete_lnurluniversal(lnurluniversal_id: str) -> None:
-    """Delete a LnurlUniversal."""
+async def delete_lnurlFlip(lnurlflip_id: str) -> None:
+    """Delete a LnurlFlip."""
     await db.execute(
-        "DELETE FROM lnurluniversal.maintable WHERE id = :id", 
-        {"id": lnurluniversal_id}
+        "DELETE FROM maintable WHERE id = :id", 
+        {"id": lnurlflip_id}
     )
 
-async def update_lnurluniversal_atomic(
-    lnurluniversal_id: str, 
+async def update_lnurlflip_atomic(
+    lnurlflip_id: str, 
     amount_delta: int,
     increment_uses: bool = False
-) -> Optional[LnurlUniversal]:
+) -> Optional[LnurlFlip]:
     """
     Atomically update the balance and optionally increment uses.
     This prevents race conditions by doing the math in the database.
     
     Args:
-        lnurluniversal_id: The ID of the universal to update
+        lnurlflip_id: The ID of the flip to update
         amount_delta: The amount in msats to add (positive) or subtract (negative)
         increment_uses: Whether to increment the uses counter
     
     Returns:
-        The updated LnurlUniversal object or None if not found
+        The updated LnurlFlip object or None if not found
     """
-    logger.info(f"Atomic update for {lnurluniversal_id}: delta={amount_delta}, increment_uses={increment_uses}")
+    logger.info(f"Atomic update for {lnurlflip_id}: delta={amount_delta}, increment_uses={increment_uses}")
     
     # Update balance and optionally increment uses
     uses_increment = ", uses = uses + 1" if increment_uses else ""
@@ -140,47 +140,47 @@ async def update_lnurluniversal_atomic(
         # SQLite uses MAX instead of GREATEST
         await db.execute(
             f"""
-            UPDATE lnurluniversal.maintable
+            UPDATE maintable
             SET total_msat = MAX(0, total_msat + :amount_delta){uses_increment}
             WHERE id = :id
             """,
-            {"id": lnurluniversal_id, "amount_delta": amount_delta}
+            {"id": lnurlflip_id, "amount_delta": amount_delta}
         )
     else:
         # PostgreSQL and CockroachDB use GREATEST
         await db.execute(
             f"""
-            UPDATE lnurluniversal.maintable
+            UPDATE maintable
             SET total_msat = GREATEST(0, total_msat + :amount_delta){uses_increment}
             WHERE id = :id
             """,
-            {"id": lnurluniversal_id, "amount_delta": amount_delta}
+            {"id": lnurlflip_id, "amount_delta": amount_delta}
         )
     
     # Return the updated record
-    updated = await get_lnurluniversal(lnurluniversal_id)
+    updated = await get_lnurlFlip(lnurlflip_id)
     if updated:
         logger.debug(f"Balance updated: {updated.total_msat} msat")
     
     return updated
 
-async def get_universal_comments(universal_id: str) -> List[dict]:
-    """Get all comments for a universal"""
+async def get_flip_comments(flip_id: str) -> List[dict]:
+    """Get all comments for a flip"""
     rows = await db.fetchall(
         """
         SELECT id, comment, timestamp, amount_msat
-        FROM lnurluniversal.invoice_comments
-        WHERE universal_id = :universal_id
+        FROM invoice_comments
+        WHERE flip_id = :flip_id
         ORDER BY timestamp DESC
         """,
-        {"universal_id": universal_id}
+        {"flip_id": flip_id}
     )
     return [dict(row) for row in rows]
 
 
 async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[str] = None) -> bool:
     """
-    Check if a lnurluniversal with the given name already exists for the wallet.
+    Check if a lnurlFlip with the given name already exists for the wallet.
     
     Args:
         name: The name to check
@@ -194,7 +194,7 @@ async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[s
         result = await db.fetchone(
             """
             SELECT COUNT(*) as count
-            FROM lnurluniversal.maintable
+            FROM maintable
             WHERE LOWER(name) = LOWER(:name) 
             AND wallet = :wallet_id
             AND id != :exclude_id
@@ -205,7 +205,7 @@ async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[s
         result = await db.fetchone(
             """
             SELECT COUNT(*) as count
-            FROM lnurluniversal.maintable
+            FROM maintable
             WHERE LOWER(name) = LOWER(:name) 
             AND wallet = :wallet_id
             """,
@@ -215,35 +215,35 @@ async def check_duplicate_name(name: str, wallet_id: str, exclude_id: Optional[s
     return result["count"] > 0 if result else False
 
 async def process_payment_with_lock(
-    lnurluniversal_id: str,
+    lnurlflip_id: str,
     amount_delta: int,
     increment_uses: bool = False,
     operation_type: str = "payment"
-) -> Optional[LnurlUniversal]:
+) -> Optional[LnurlFlip]:
     """
     Process payment operations atomically.
     The database handles concurrency through atomic operations.
     
     Args:
-        lnurluniversal_id: The ID of the universal to update
+        lnurlflip_id: The ID of the flip to update
         amount_delta: The amount in msats to add (positive) or subtract (negative)
         increment_uses: Whether to increment the uses counter
         operation_type: Type of operation ("payment" or "withdrawal")
     
     Returns:
-        The updated LnurlUniversal object or None if not found
+        The updated LnurlFlip object or None if not found
     """
     try:
         # For withdrawals, check balance first
         if amount_delta < 0:  # Withdrawal
-            current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+            current_balance = await get_lnurlflip_balance(lnurlflip_id)
             if current_balance < abs(amount_delta):
                 logger.error(f"Insufficient balance for withdrawal: {current_balance} < {abs(amount_delta)}")
                 raise HTTPException(status_code=400, detail="Insufficient balance")
         
         # Perform the atomic update - database handles concurrency
-        result = await update_lnurluniversal_atomic(
-            lnurluniversal_id=lnurluniversal_id,
+        result = await update_lnurlflip_atomic(
+            lnurlflip_id=lnurlflip_id,
             amount_delta=amount_delta,
             increment_uses=increment_uses
         )

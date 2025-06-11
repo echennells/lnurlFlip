@@ -1,7 +1,7 @@
 {
-  "name": "LnurlUniversal",
+  "name": "LnurlFlip",
   "short_description": "Minimal extension to build on",
-  "tile": "/lnurluniversal/static/image/lnurluniversal.png",
+  "tile": "/lnurlFlip/static/image/lnurlFlip.png",
   "min_lnbits_version": "0.12.5",
   "contributors": [
     {
@@ -22,18 +22,18 @@
   ],
   "images": [
     {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/static/image/1.png",
+      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/1.png",
       "link": "https://www.youtube.com/embed/SkkIwO_X4i4?si=9JJh1Fc6GfHDZK6b"
     },
     {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/static/image/2.png"
+      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/2.png"
     },
     {
-      "uri": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/static/image/3.png"
+      "uri": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/static/image/3.png"
     }
   ],
-  "description_md": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/description.md",
-  "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/lnurluniversal/main/toc.md",
+  "description_md": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/description.md",
+  "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/lnurlFlip/main/toc.md",
   "license": "MIT",
   "dependencies": [
     "withdraw",

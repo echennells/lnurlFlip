@@ -1,9 +1,9 @@
 {
   "repos": [
     {
-      "id": "lnurluniversal",
+      "id": "lnurlFlip",
       "organisation": "echennells",
-      "repository": "lnurl-universal"
+      "repository": "lnurl-flip"
     }
   ]
 }

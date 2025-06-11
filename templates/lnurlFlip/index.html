@@ -7,7 +7,7 @@
     <q-card>
       <q-card-section>
         <q-btn unelevated color="primary" @click="formDialog.show = true">
-          New LnurlUniversal
+          New LnurlFlip
         </q-btn>
       </q-card-section>
     </q-card>
@@ -16,7 +16,7 @@
       <q-card-section>
         <div class="row items-center no-wrap q-mb-md">
           <div class="col">
-            <h5 class="text-subtitle1 q-my-none">LnurlUniversals</h5>
+            <h5 class="text-subtitle1 q-my-none">LnurlFlips</h5>
           </div>
           <div class="col-auto">
             <q-btn flat color="grey" @click="exportCSV">Export to CSV</q-btn>
@@ -25,10 +25,10 @@
         <q-table
           dense
           flat
-          :rows="universals"
-          :columns="universalsTable.columns"
+          :rows="flips"
+          :columns="flipsTable.columns"
           row-key="id"
-          v-model:pagination="universalsTable.pagination"
+          v-model:pagination="flipsTable.pagination"
         >
           <template v-slot:header="props">
             <q-tr :props="props">
@@ -61,7 +61,7 @@
                   flat
                   dense
                   size="xs"
-                  @click="editUniversal(props.row.id)"
+                  @click="editFlip(props.row.id)"
                   icon="edit"
                   color="light-blue"
                 >
@@ -92,7 +92,7 @@
                   flat
                   dense
                   size="xs"
-                  @click="deleteUniversal(props.row.id)"
+                  @click="deleteFlip(props.row.id)"
                   icon="delete"
                   color="red"
                 >
@@ -110,18 +110,18 @@
     <q-card>
       <q-card-section>
         <h6 class="text-subtitle1 q-my-none">
-          {% raw %}{{SITE_TITLE}}{% endraw %} LnurlUniversal extension
+          {% raw %}{{SITE_TITLE}}{% endraw %} LnurlFlip extension
         </h6>
         <p>
-          Create universal LNURL links that can switch between pay and withdraw modes.
+          Create flip LNURL links that can switch between pay and withdraw modes.
         </p>
       </q-card-section>
       <q-card-section class="q-pa-none">
         <q-separator></q-separator>
         <q-list>
-          {% include "lnurluniversal/_api_docs.html" %}
+          {% include "lnurlFlip/_api_docs.html" %}
           <q-separator></q-separator>
-          {% include "lnurluniversal/_lnurluniversal.html" %}
+          {% include "lnurlFlip/_lnurlFlip.html" %}
         </q-list>
       </q-card-section>
     </q-card>
@@ -129,7 +129,7 @@
 
   <q-dialog v-model="formDialog.show" @hide="closeFormDialog">
     <q-card class="q-pa-lg q-pt-xl lnbits__dialog-card">
-      <q-form @submit="saveUniversal" class="q-gutter-md">
+      <q-form @submit="saveFlip" class="q-gutter-md">
         <q-select
           filled
           dense
@@ -181,7 +181,7 @@
             unelevated
             color="primary"
             type="submit"
-          >Update LnurlUniversal</q-btn>
+          >Update LnurlFlip</q-btn>
           <q-btn
             v-else
             unelevated
@@ -192,7 +192,7 @@
                 formDialog.data.selectedLnurlp == null ||
                 formDialog.data.selectedLnurlw == null"
             type="submit"
-          >Create LnurlUniversal</q-btn>
+          >Create LnurlFlip</q-btn>
           <q-btn v-close-popup flat color="grey" class="q-ml-auto">Cancel</q-btn>
         </div>
       </q-form>
@@ -267,5 +267,5 @@
 
 {% block scripts %}
 {{ window_vars(user) }}
-<script src="{{ static_url_for('lnurluniversal/static', path='js/index.js') }}"></script>
+<script src="{{ static_url_for('lnurlFlip/static', path='js/index.js') }}"></script>
 {% endblock %}

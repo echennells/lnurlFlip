@@ -1,6 +1,6 @@
 /* globals Quasar, Vue, _, VueQrcode, windowMixin, LNbits, LOCALE */
 
-const mapLnurlUniversal = obj => {
+const mapLnurlFlip = obj => {
   obj._data = _.clone(obj)
   obj.date = LNbits.utils.formatDateString(obj.created_at) || new Date().toLocaleString()
   obj.comment_count = obj.comment_count || 0
@@ -12,8 +12,8 @@ window.app = Vue.createApp({
   mixins: [window.windowMixin],
   data() {
     return {
-      universals: [],
-      universalsTable: {
+      flips: [],
+      flipsTable: {
         columns: [
           {
             name: 'name',
@@ -70,40 +70,40 @@ window.app = Vue.createApp({
     }
   },
   methods: {
-    async getUniversals() {
+    async getFlips() {
       try {
         const response = await LNbits.api.request(
           'GET',
-          '/lnurluniversal/api/v1/myex?all_wallets=true',
+          '/lnurlFlip/api/v1/myex?all_wallets=true',
           this.g.user.wallets[0].inkey
         )
         
-        // Fetch balance for each universal
-        const universalsWithBalance = await Promise.all(
-          response.data.map(async (universal) => {
+        // Fetch balance for each flip
+        const flipsWithBalance = await Promise.all(
+          response.data.map(async (flip) => {
             try {
               const balanceResponse = await LNbits.api.request(
                 'GET',
-                `/lnurluniversal/api/v1/balance/${universal.id}`,
+                `/lnurlFlip/api/v1/balance/${flip.id}`,
                 this.g.user.wallets[0].inkey
               )
               return {
-                ...mapLnurlUniversal(universal),
+                ...mapLnurlFlip(flip),
                 balance: balanceResponse.data.balance || 0
               }
             } catch (error) {
-              console.error(`Error fetching balance for ${universal.id}:`, error)
+              console.error(`Error fetching balance for ${flip.id}:`, error)
               return {
-                ...mapLnurlUniversal(universal),
+                ...mapLnurlFlip(flip),
                 balance: 0
               }
             }
           })
         )
         
-        this.universals = universalsWithBalance
+        this.flips = flipsWithBalance
       } catch (error) {
-        console.error('Error fetching universals:', error)
+        console.error('Error fetching flips:', error)
         LNbits.utils.notifyApiError(error)
       }
     },
@@ -179,30 +179,30 @@ window.app = Vue.createApp({
       this.formDialog.data = {}
     },
 
-    saveUniversal() {
+    saveFlip() {
       const wallet = _.findWhere(this.g.user.wallets, {
         id: this.formDialog.data.wallet
       })
       const data = _.clone(this.formDialog.data)
       
       if (data.id) {
-        this.updateUniversal(wallet, data)
+        this.updateFlip(wallet, data)
       } else {
-        this.createUniversal(wallet, data)
+        this.createFlip(wallet, data)
       }
     },
 
-    updateUniversal(wallet, data) {
+    updateFlip(wallet, data) {
       LNbits.api
         .request(
           'PUT',
-          '/lnurluniversal/api/v1/myex/' + data.id,
+          '/lnurlFlip/api/v1/myex/' + data.id,
           wallet.adminkey,
           data
         )
         .then(response => {
-          this.universals = _.reject(this.universals, obj => obj.id === data.id)
-          this.universals.push(mapLnurlUniversal(response.data))
+          this.flips = _.reject(this.flips, obj => obj.id === data.id)
+          this.flips.push(mapLnurlFlip(response.data))
           this.formDialog.show = false
           this.resetFormData()
         })
@@ -211,11 +211,11 @@ window.app = Vue.createApp({
         })
     },
 
-    createUniversal(wallet, data) {
+    createFlip(wallet, data) {
       LNbits.api
-        .request('POST', '/lnurluniversal/api/v1/myex', wallet.adminkey, data)
+        .request('POST', '/lnurlFlip/api/v1/myex', wallet.adminkey, data)
         .then(response => {
-          this.getUniversals()
+          this.getFlips()
           this.formDialog.show = false
           this.resetFormData()
         })
@@ -231,54 +231,54 @@ window.app = Vue.createApp({
       }
     },
 
-    editUniversal(universalId) {
-      const universal = this.universals.find(u => u.id === universalId)
+    editFlip(flipId) {
+      const universal = this.flips.find(u => u.id === flipId)
       if (!universal) return
       
       this.formDialog.data = { ...universal._data }
       this.formDialog.show = true
     },
 
-    async deleteUniversal(universalId) {
-      const universal = this.universals.find(u => u.id === universalId)
-      if (!universal) return
+    async deleteUniversal(flipId) {
+      const flip = this.flips.find(u => u.id === flipId)
+      if (!flip) return
 
       LNbits.utils
-        .confirmDialog('Are you sure you want to delete this LnurlUniversal?')
+        .confirmDialog('Are you sure you want to delete this LNURL Flip?')
         .onOk(async () => {
           try {
             await LNbits.api.request(
               'DELETE',
-              `/lnurluniversal/api/v1/myex/${universalId}`,
+              `/lnurlFlip/api/v1/myex/${flipId}`,
               this.g.user.wallets[0].adminkey
             )
             
-            await this.getUniversals()
+            await this.getFlips()
             
             this.$q.notify({
               type: 'positive',
-              message: 'LnurlUniversal deleted successfully',
+              message: 'LNURL Flip deleted successfully',
               timeout: 5000
             })
           } catch (error) {
-            console.error('Error deleting universal:', error)
+            console.error('Error deleting flip:', error)
             LNbits.utils.notifyApiError(error)
           }
         })
     },
 
-    async openQrCodeDialog(universalId) {
-      const universal = this.universals.find(u => u.id === universalId)
-      if (!universal) return
+    async openQrCodeDialog(flipId) {
+      const flip = this.flips.find(u => u.id === flipId)
+      if (!flip) return
 
       try {
         const response = await LNbits.api.request(
           'GET',
-          `/lnurluniversal/api/v1/lnurl/${universalId}`,
+          `/lnurlFlip/api/v1/lnurl/${flipId}`,
           this.g.user.wallets[0].inkey
         )
         
-        this.qrCodeDialog.data = universal
+        this.qrCodeDialog.data = flip
         this.qrCodeDialog.qrValue = response.data
         this.qrCodeDialog.show = true
       } catch (error) {
@@ -287,7 +287,7 @@ window.app = Vue.createApp({
       }
     },
 
-    async showComments(universalId) {
+    async showComments(flipId) {
       this.commentsDialog.show = true
       this.commentsDialog.loading = true
       this.commentsDialog.comments = []
@@ -295,7 +295,7 @@ window.app = Vue.createApp({
       try {
         const response = await LNbits.api.request(
           'GET',
-          `/lnurluniversal/api/v1/comments/${universalId}`,
+          `/lnurlFlip/api/v1/comments/${flipId}`,
           this.g.user.wallets[0].inkey
         )
         
@@ -318,9 +318,9 @@ window.app = Vue.createApp({
 
     exportCSV() {
       LNbits.utils.exportCSV(
-        this.universalsTable.columns,
-        this.universals,
-        'lnurluniversals'
+        this.flipsTable.columns,
+        this.flips,
+        'lnurlflips'
       )
     },
 
@@ -346,11 +346,11 @@ window.app = Vue.createApp({
       this.connection.onmessage = async (e) => {
         try {
           const data = JSON.parse(e.data)
-          if (data.universal_id) {
-            // Update balance for specific universal
-            const universal = this.universals.find(u => u.id === data.universal_id)
-            if (universal) {
-              universal.balance = data.balance || 0
+          if (data.flip_id) {
+            // Update balance for specific flip
+            const flip = this.flips.find(u => u.id === data.flip_id)
+            if (flip) {
+              flip.balance = data.balance || 0
             }
           }
         } catch (error) {
@@ -385,7 +385,7 @@ window.app = Vue.createApp({
   },
   created() {
     if (this.g.user.wallets && this.g.user.wallets.length > 0) {
-      this.getUniversals()
+      this.getFlips()
       this.connectWebSocket(this.g.user.wallets[0].id)
     }
   }

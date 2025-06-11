@@ -8,14 +8,14 @@ from lnbits.settings import settings
 from starlette.exceptions import HTTPException
 from starlette.responses import HTMLResponse
 
-from .crud import get_lnurluniversal
+from .crud import get_lnurlFlip
 from lnurl import encode as lnurl_encode
 
-lnurluniversal_generic_router = APIRouter()
+lnurlFlip_generic_router = APIRouter()
 
 
-def lnurluniversal_renderer():
-    return template_renderer(["lnurluniversal/templates"])
+def lnurlFlip_renderer():
+    return template_renderer(["lnurlFlip/templates"])
 
 
 #######################################
@@ -26,37 +26,37 @@ def lnurluniversal_renderer():
 # Backend admin page
 
 
-@lnurluniversal_generic_router.get("/", response_class=HTMLResponse)
+@lnurlFlip_generic_router.get("/", response_class=HTMLResponse)
 async def index(request: Request, user: User = Depends(check_user_exists)):
-    return lnurluniversal_renderer().TemplateResponse(
-        "lnurluniversal/index.html", {"request": request, "user": user.json()}
+    return lnurlFlip_renderer().TemplateResponse(
+        "lnurlFlip/index.html", {"request": request, "user": user.json()}
     )
 
 
 # Frontend shareable page
 
 
-@lnurluniversal_generic_router.get("/{lnurluniversal_id}")
-async def lnurluniversal(request: Request, lnurluniversal_id):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+@lnurlFlip_generic_router.get("/{lnurlFlip_id}")
+async def lnurlFlip(request: Request, lnurlFlip_id):
+    lnurlFlip = await get_lnurlFlip(lnurlFlip_id)
+    if not lnurlFlip:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlFlip does not exist."
         )
     
     # Generate the full LNURL for the QR code (without lightning: prefix as template adds it)
     base_url = str(request.base_url).rstrip('/')
-    redirect_url = f"{base_url}/lnurluniversal/api/v1/redirect/{lnurluniversal_id}"
+    redirect_url = f"{base_url}/lnurlFlip/api/v1/redirect/{lnurlFlip_id}"
     lnurl = lnurl_encode(redirect_url)
     
-    return lnurluniversal_renderer().TemplateResponse(
-        "lnurluniversal/lnurluniversal.html",
+    return lnurlFlip_renderer().TemplateResponse(
+        "lnurlFlip/lnurlFlip.html",
         {
             "request": request,
-            "lnurluniversal_id": lnurluniversal_id,
-            "lnurlpay": lnurluniversal.selectedLnurlp,
+            "lnurlFlip_id": lnurlFlip_id,
+            "lnurlpay": lnurlFlip.selectedLnurlp,
             "lnurl": lnurl,
-            "web_manifest": f"/lnurluniversal/manifest/{lnurluniversal_id}.webmanifest",
+            "web_manifest": f"/lnurlFlip/manifest/{lnurlFlip_id}.webmanifest",
         },
     )
 
@@ -64,17 +64,17 @@ async def lnurluniversal(request: Request, lnurluniversal_id):
 # Manifest for public page, customise or remove manifest completely
 
 
-@lnurluniversal_generic_router.get("/manifest/{lnurluniversal_id}.webmanifest")
-async def manifest(lnurluniversal_id: str):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+@lnurlFlip_generic_router.get("/manifest/{lnurlFlip_id}.webmanifest")
+async def manifest(lnurlFlip_id: str):
+    lnurlFlip = await get_lnurlFlip(lnurlFlip_id)
+    if not lnurlFlip:
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="LnurlUniversal does not exist."
+            status_code=HTTPStatus.NOT_FOUND, detail="LnurlFlip does not exist."
         )
 
     return {
         "short_name": settings.lnbits_site_title,
-        "name": lnurluniversal.name + " - " + settings.lnbits_site_title,
+        "name": lnurlFlip.name + " - " + settings.lnbits_site_title,
         "icons": [
             {
                 "src": (
@@ -86,18 +86,18 @@ async def manifest(lnurluniversal_id: str):
                 "sizes": "900x900",
             }
         ],
-        "start_url": "/lnurluniversal/" + lnurluniversal_id,
+        "start_url": "/lnurlFlip/" + lnurlFlip_id,
         "background_color": "#1F2234",
         "description": "Minimal extension to build on",
         "display": "standalone",
-        "scope": "/lnurluniversal/" + lnurluniversal_id,
+        "scope": "/lnurlFlip/" + lnurlFlip_id,
         "theme_color": "#1F2234",
         "shortcuts": [
             {
-                "name": lnurluniversal.name + " - " + settings.lnbits_site_title,
-                "short_name": lnurluniversal.name,
-                "description": lnurluniversal.name + " - " + settings.lnbits_site_title,
-                "url": "/lnurluniversal/" + lnurluniversal_id,
+                "name": lnurlFlip.name + " - " + settings.lnbits_site_title,
+                "short_name": lnurlFlip.name,
+                "description": lnurlFlip.name + " - " + settings.lnbits_site_title,
+                "url": "/lnurlFlip/" + lnurlFlip_id,
             }
         ],
     }

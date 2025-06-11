@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "lnurluniversal"
+name = "lnurlFlip"
 version = "0.0.0"
 description = "Eightball is a simple API that allows you to create a random number generator."
 authors = ["benarc", "dni <dni@lnbits.com>"]

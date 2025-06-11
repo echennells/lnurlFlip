@@ -18,32 +18,32 @@ from lnurl import encode as lnurl_encode
 MIN_WITHDRAWABLE_MSAT = 50000       # 50 sats minimum withdrawable amount
 
 from .crud import (
-    create_lnurluniversal,
-    delete_lnurluniversal,
-    get_lnurluniversal,
-    get_lnurluniversals,
-    update_lnurluniversal,
-    get_lnurluniversal_balance,
-    get_universal_comments,
+    create_lnurlflip,
+    delete_lnurlFlip,
+    get_lnurlFlip,
+    get_lnurlFlips,
+    update_lnurlFlip,
+    get_lnurlflip_balance,
+    get_flip_comments,
     check_duplicate_name,
     process_payment_with_lock,
     db
 )
-from .models import CreateLnurlUniversalData, LnurlUniversal
+from .models import CreateLnurlFlipData, LnurlFlip
 from .utils import get_withdraw_link_info
 import time
 import logging
 
-lnurluniversal_api_router = APIRouter()
+lnurlFlip_api_router = APIRouter()
 
 logging.basicConfig(level=logging.INFO)
 
 
-async def create_payment_response(request: Request, lnurluniversal_id: str, pay_link) -> dict:
+async def create_payment_response(request: Request, lnurlflip_id: str, pay_link) -> dict:
     """Create a standardized LNURL payment response."""
     callback_url = str(request.url_for(
-        "lnurluniversal.api_lnurl_callback",
-        lnurluniversal_id=lnurluniversal_id
+        "lnurlFlip.api_lnurl_callback",
+        lnurlflip_id=lnurlflip_id
     ))
     
     return {
@@ -65,7 +65,7 @@ async def create_payment_response(request: Request, lnurluniversal_id: str, pay_
 
 ## Get all the records belonging to the user
 
-@lnurluniversal_api_router.get("/api/v1/myex/lnurlp_links")
+@lnurlFlip_api_router.get("/api/v1/myex/lnurlp_links")
 async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_key)):
     try:
         from lnbits.extensions.lnurlp.crud import get_pay_links
@@ -89,7 +89,7 @@ async def api_get_lnurlp_links(wallet: WalletTypeInfo = Depends(require_invoice_
             detail="Server error"
         )
 
-@lnurluniversal_api_router.get("/api/v1/lnurluniversal/withdraw/{withdraw_id}")
+@lnurlFlip_api_router.get("/api/v1/lnurlFlip/withdraw/{withdraw_id}")
 async def api_get_withdraw_link(withdraw_id: str, user: User = Depends(check_user_exists)):
     withdraw_info = await get_withdraw_link_info(withdraw_id)
     if "error" in withdraw_info:
@@ -97,8 +97,8 @@ async def api_get_withdraw_link(withdraw_id: str, user: User = Depends(check_use
         raise HTTPException(status_code=404, detail="Not found")
     return withdraw_info
 
-@lnurluniversal_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
-async def api_lnurluniversals(
+@lnurlFlip_api_router.get("/api/v1/myex", status_code=HTTPStatus.OK)
+async def api_lnurlFlips(
     all_wallets: bool = Query(False),
     wallet: WalletTypeInfo = Depends(require_invoice_key),
 ):
@@ -107,14 +107,14 @@ async def api_lnurluniversals(
         user = await get_user(wallet.wallet.user)
         wallet_ids = user.wallet_ids if user else []
 
-    records = await get_lnurluniversals(wallet_ids)
+    records = await get_lnurlFlips(wallet_ids)
     result = []
 
     for record in records:
         # Get comment count for each record
         comment_count = await db.fetchone(
-            "SELECT COUNT(*) as count FROM lnurluniversal.invoice_comments WHERE universal_id = :universal_id",
-            {"universal_id": record.id}
+            "SELECT COUNT(*) as count FROM lnurlFlip.invoice_comments WHERE flip_id = :flip_id",
+            {"flip_id": record.id}
         )
         data = record.dict()
         data['comment_count'] = comment_count['count'] if comment_count else 0
@@ -122,43 +122,43 @@ async def api_lnurluniversals(
 
     return result
 
-@lnurluniversal_api_router.get("/api/v1/balance/{lnurluniversal_id}")
+@lnurlFlip_api_router.get("/api/v1/balance/{lnurlflip_id}")
 async def api_get_balance(
-    lnurluniversal_id: str,
+    lnurlflip_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
+    flip = await get_lnurlFlip(lnurlflip_id)
+    if not flip:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Check if user has access to this universal
-    if universal.wallet != wallet.wallet.id:
+    # Check if user has access to this flip
+    if flip.wallet != wallet.wallet.id:
         user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
+        if not user or flip.wallet not in user.wallet_ids:
             raise HTTPException(status_code=403, detail="Access denied")
     
-    balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    balance = await get_lnurlflip_balance(lnurlflip_id)
     return {"balance": balance}
 
-@lnurluniversal_api_router.get("/api/v1/lnurl/{lnurluniversal_id}")
+@lnurlFlip_api_router.get("/api/v1/lnurl/{lnurlflip_id}")
 async def api_get_lnurl(
     request: Request, 
-    lnurluniversal_id: str,
+    lnurlflip_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    universal = await get_lnurluniversal(lnurluniversal_id)
-    if not universal:
+    flip = await get_lnurlFlip(lnurlflip_id)
+    if not flip:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Check if user has access to this universal
-    if universal.wallet != wallet.wallet.id:
+    # Check if user has access to this flip
+    if flip.wallet != wallet.wallet.id:
         user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
+        if not user or flip.wallet not in user.wallet_ids:
             raise HTTPException(status_code=403, detail="Access denied")
     
     # Just construct the URL directly
     base_url = str(request.base_url).rstrip('/')
-    redirect_url = f"{base_url}/lnurluniversal/api/v1/redirect/{lnurluniversal_id}"
+    redirect_url = f"{base_url}/lnurlFlip/api/v1/redirect/{lnurlflip_id}"
 
     logging.info(f"Redirect URL before encoding: {redirect_url}")
 
@@ -169,32 +169,32 @@ async def api_get_lnurl(
 ## Get a single record
 
 
-@lnurluniversal_api_router.get(
-    "/api/v1/myex/{lnurluniversal_id}",
+@lnurlFlip_api_router.get(
+    "/api/v1/myex/{lnurlflip_id}",
     status_code=HTTPStatus.OK,
 )
-async def api_lnurluniversal(
-    lnurluniversal_id: str,
+async def api_lnurlFlip(
+    lnurlflip_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
+    if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Check if user has access to this universal
-    if lnurluniversal.wallet != wallet.wallet.id:
+    # Check if user has access to this flip
+    if lnurlflip.wallet != wallet.wallet.id:
         user = await get_user(wallet.wallet.user)
-        if not user or lnurluniversal.wallet not in user.wallet_ids:
+        if not user or lnurlflip.wallet not in user.wallet_ids:
             raise HTTPException(status_code=403, detail="Access denied")
     
     # Add balance and comment count like the list endpoint
-    balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    balance = await get_lnurlflip_balance(lnurlflip_id)
     comment_count = await db.fetchone(
-        "SELECT COUNT(*) as count FROM lnurluniversal.invoice_comments WHERE universal_id = :universal_id",
-        {"universal_id": lnurluniversal_id}
+        "SELECT COUNT(*) as count FROM lnurlFlip.invoice_comments WHERE flip_id = :flip_id",
+        {"flip_id": lnurlflip_id}
     )
     
-    data = lnurluniversal.dict()
+    data = lnurlflip.dict()
     data['balance'] = balance
     data['comment_count'] = comment_count['count'] if comment_count else 0
     return data
@@ -202,55 +202,55 @@ async def api_lnurluniversal(
 
 
 
-@lnurluniversal_api_router.get("/api/v1/redirect/{lnurluniversal_id}")
-async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
-   logging.info(f"Redirect request for id: {lnurluniversal_id}")
-   lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-   if not lnurluniversal:
-       logger.error(f"Record not found for lnurluniversal_id: {lnurluniversal_id}")
+@lnurlFlip_api_router.get("/api/v1/redirect/{lnurlflip_id}")
+async def api_lnurlflip_redirect(request: Request, lnurlflip_id: str):
+   logging.info(f"Redirect request for id: {lnurlflip_id}")
+   lnurlflip = await get_lnurlFlip(lnurlflip_id)
+   if not lnurlflip:
+       logger.error(f"Record not found for lnurlflip_id: {lnurlflip_id}")
        raise HTTPException(status_code=404, detail="Not found")
 
    # Get balance information (all balances in msats for consistency)
-   universal_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)
+   flip_balance_msat = await get_lnurlflip_balance(lnurlflip_id)
 
    # Check actual wallet balance
    from lnbits.core.crud import get_wallet
-   wallet = await get_wallet(lnurluniversal.wallet)
+   wallet = await get_wallet(lnurlflip.wallet)
    actual_balance_msat = wallet.balance_msat
 
    # Simplified state determination logic:
-   # Use withdraw mode only if universal has withdrawable balance
+   # Use withdraw mode only if flip has withdrawable balance
    # and wallet can cover the withdrawal
    can_withdraw = (
-       universal_balance_msat >= MIN_WITHDRAWABLE_MSAT and  # Has minimum withdrawable balance
-       actual_balance_msat >= universal_balance_msat  # Wallet can cover the withdrawal
+       flip_balance_msat >= MIN_WITHDRAWABLE_MSAT and  # Has minimum withdrawable balance
+       actual_balance_msat >= flip_balance_msat  # Wallet can cover the withdrawal
    )
    
    # Log the decision
    mode = "withdraw" if can_withdraw else "payment"
-   logger.debug(f"Using {mode} mode - universal: {universal_balance_msat // 1000} sats, wallet: {actual_balance_msat // 1000} sats")
+   logger.debug(f"Using {mode} mode - flip: {flip_balance_msat // 1000} sats, wallet: {actual_balance_msat // 1000} sats")
    
    # Generate appropriate response based on withdrawal capability
    if not can_withdraw:
        # Payment mode response
-       pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
+       pay_link = await get_pay_link(lnurlflip.selectedLnurlp)
        if not pay_link:
-           logger.error(f"Payment link not found: {lnurluniversal.selectedLnurlp} for universal_id: {lnurluniversal_id}")
+           logger.error(f"Payment link not found: {lnurlflip.selectedLnurlp} for flip_id: {lnurlflip_id}")
            raise HTTPException(status_code=404, detail="Not found")
        
-       return await create_payment_response(request, lnurluniversal_id, pay_link)
+       return await create_payment_response(request, lnurlflip_id, pay_link)
    else:
        # Withdraw mode response
        
        # Get withdraw link configuration
-       withdraw_info = await get_withdraw_link_info(lnurluniversal.selectedLnurlw)
+       withdraw_info = await get_withdraw_link_info(lnurlflip.selectedLnurlw)
        if "error" in withdraw_info:
-           logger.error(f"Withdraw link not found: {lnurluniversal.selectedLnurlw} for universal_id: {lnurluniversal_id}")
+           logger.error(f"Withdraw link not found: {lnurlflip.selectedLnurlw} for flip_id: {lnurlflip_id}")
            raise HTTPException(status_code=404, detail="Withdraw link not found")
        
        callback_url = str(request.url_for(
-           "lnurluniversal.api_withdraw_callback",
-           lnurluniversal_id=lnurluniversal_id
+           "lnurlFlip.api_withdraw_callback",
+           lnurlflip_id=lnurlflip_id
        ))
        
        # Use withdraw link's configured limits (converting from sats to msats)
@@ -258,9 +258,9 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
        max_withdrawable_msat = withdraw_info["max_withdrawable"] * 1000
        
        
-       # Apply constraints: universal balance and wallet balance
-       # First, limit to universal balance
-       effective_max_msat = min(max_withdrawable_msat, universal_balance_msat)
+       # Apply constraints: flip balance and wallet balance
+       # First, limit to flip balance
+       effective_max_msat = min(max_withdrawable_msat, flip_balance_msat)
        
        # Then, ensure we don't exceed available wallet balance
        if effective_max_msat > actual_balance_msat:
@@ -268,7 +268,7 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            
        max_withdrawable_msat = effective_max_msat
        
-       logger.info(f"Withdraw limits for {lnurluniversal_id[:8]}... - min: {min_withdrawable_msat // 1000} sats, max: {max_withdrawable_msat // 1000} sats")
+       logger.info(f"Withdraw limits for {lnurlflip_id[:8]}... - min: {min_withdrawable_msat // 1000} sats, max: {max_withdrawable_msat // 1000} sats")
        
        return {
            "tag": "withdrawRequest",
@@ -276,30 +276,30 @@ async def api_lnurluniversal_redirect(request: Request, lnurluniversal_id: str):
            "k1": urlsafe_short_hash(),
            "minWithdrawable": min_withdrawable_msat,
            "maxWithdrawable": max_withdrawable_msat,
-           "defaultDescription": f"Withdraw from {lnurluniversal.name}"
+           "defaultDescription": f"Withdraw from {lnurlflip.name}"
        }
 
-@lnurluniversal_api_router.get(
-    "/api/v1/lnurl/cb/{lnurluniversal_id}",
-    name="lnurluniversal.api_lnurl_callback"
+@lnurlFlip_api_router.get(
+    "/api/v1/lnurl/cb/{lnurlflip_id}",
+    name="lnurlFlip.api_lnurl_callback"
 )
 async def api_lnurl_callback(
     request: Request,
-    lnurluniversal_id: str,
+    lnurlflip_id: str,
     amount: int = Query(...),
     comment: Optional[str] = Query(None, max_length=500, regex="^[^<>]*$")
 ):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
-        logger.error(f"Pay callback - record not found: {lnurluniversal_id}")
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
+    if not lnurlflip:
+        logger.error(f"Pay callback - record not found: {lnurlflip_id}")
         return {"status": "ERROR", "reason": "Invalid payment link"}
 
-    pay_link = await get_pay_link(lnurluniversal.selectedLnurlp)
+    pay_link = await get_pay_link(lnurlflip.selectedLnurlp)
     if not pay_link:
-        logger.error(f"Pay callback - payment link not found: {lnurluniversal.selectedLnurlp}")
+        logger.error(f"Pay callback - payment link not found: {lnurlflip.selectedLnurlp}")
         return {"status": "ERROR", "reason": "Payment setup error"}
     
-    logger.debug(f"Payment link {pay_link.id} for universal {lnurluniversal_id[:8]}...")
+    logger.debug(f"Payment link {pay_link.id} for flip {lnurlflip_id[:8]}...")
     
     # Validate that the wallet exists
     wallet = await get_wallet(pay_link.wallet)
@@ -319,13 +319,13 @@ async def api_lnurl_callback(
         comment_id = urlsafe_short_hash()
         await db.execute(
             """
-            INSERT INTO lnurluniversal.invoice_comments 
-            (id, universal_id, comment, timestamp, amount_msat)
-            VALUES (:id, :universal_id, :comment, :timestamp, :amount_msat)
+            INSERT INTO lnurlFlip.invoice_comments 
+            (id, flip_id, comment, timestamp, amount_msat)
+            VALUES (:id, :flip_id, :comment, :timestamp, :amount_msat)
             """,
             {
                 "id": comment_id,
-                "universal_id": lnurluniversal_id,
+                "flip_id": lnurlflip_id,
                 "comment": comment,
                 "timestamp": int(time.time()),
                 "amount_msat": amount  # Amount in msats from LNURL
@@ -339,9 +339,9 @@ async def api_lnurl_callback(
             amount=amount // 1000,  # Convert from msats to sats for invoice creation
             memo=f"{pay_link.description}{' - ' + comment if comment else ''}",
             extra={
-                "tag": "ext_lnurluniversal",
-                "universal_id": lnurluniversal_id,
-                "selectedLnurlp": lnurluniversal.selectedLnurlp,
+                "tag": "ext_lnurlflip",
+                "flip_id": lnurlflip_id,
+                "selectedLnurlp": lnurlflip.selectedLnurlp,
                 "link": pay_link.id,
                 "comment": comment if comment else None
             }
@@ -356,9 +356,9 @@ async def api_lnurl_callback(
         return {"status": "ERROR", "reason": f"Invoice creation error: {str(e)}"}
 
     # Do not update balance here - it will be updated when payment is confirmed in tasks.py
-    current_balance = await get_lnurluniversal_balance(lnurluniversal_id)
+    current_balance = await get_lnurlflip_balance(lnurlflip_id)
     
-    logger.info(f"Created invoice for universal {lnurluniversal_id[:8]}... amount: {amount // 1000} sats, hash: {payment.payment_hash[:8]}...")
+    logger.info(f"Created invoice for flip {lnurlflip_id[:8]}... amount: {amount // 1000} sats, hash: {payment.payment_hash[:8]}...")
 
     return {
         "pr": payment.bolt11,
@@ -370,35 +370,35 @@ async def api_lnurl_callback(
     }
 
 
-@lnurluniversal_api_router.get(
-  "/api/v1/lnurl/withdraw/cb/{lnurluniversal_id}",
-  name="lnurluniversal.api_withdraw_callback"
+@lnurlFlip_api_router.get(
+  "/api/v1/lnurl/withdraw/cb/{lnurlflip_id}",
+  name="lnurlFlip.api_withdraw_callback"
 )
 
 async def api_withdraw_callback(
   request: Request,
-  lnurluniversal_id: str,
+  lnurlflip_id: str,
   k1: str = Query(...),
   pr: str = Query(...)
 ):
-  lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-  if not lnurluniversal:
+  lnurlflip = await get_lnurlFlip(lnurlflip_id)
+  if not lnurlflip:
       return {"status": "ERROR", "reason": "Record not found"}
 
   # Get withdraw link configuration to validate limits
-  withdraw_info = await get_withdraw_link_info(lnurluniversal.selectedLnurlw)
+  withdraw_info = await get_withdraw_link_info(lnurlflip.selectedLnurlw)
   if "error" in withdraw_info:
-      logger.error(f"Withdraw link not found: {lnurluniversal.selectedLnurlw} for universal_id: {lnurluniversal_id}")
+      logger.error(f"Withdraw link not found: {lnurlflip.selectedLnurlw} for flip_id: {lnurlflip_id}")
       return {"status": "ERROR", "reason": "Withdraw link configuration error"}
 
   amount_msat = decode_bolt11(pr).amount_msat  # Amount from invoice in msats
-  available_balance_msat = await get_lnurluniversal_balance(lnurluniversal_id)  # Balance in msats
+  available_balance_msat = await get_lnurlflip_balance(lnurlflip_id)  # Balance in msats
 
   # Check against withdraw link limits
   min_withdrawable_msat = withdraw_info["min_withdrawable"] * 1000
   max_withdrawable_msat = withdraw_info["max_withdrawable"] * 1000
   
-  # Apply the same constraint as in the initial request: limit to universal balance
+  # Apply the same constraint as in the initial request: limit to flip balance
   effective_max_msat = min(max_withdrawable_msat, available_balance_msat)
   
   if amount_msat < min_withdrawable_msat:
@@ -413,12 +413,12 @@ async def api_withdraw_callback(
   withdraw_id = urlsafe_short_hash()
   await db.execute(
       """
-      INSERT INTO lnurluniversal.pending_withdrawals (id, universal_id, amount_msat, created_time, payment_request)
-      VALUES (:id, :universal_id, :amount_msat, :created_time, :payment_request)
+      INSERT INTO lnurlFlip.pending_withdrawals (id, flip_id, amount_msat, created_time, payment_request)
+      VALUES (:id, :flip_id, :amount_msat, :created_time, :payment_request)
       """,
       {
           "id": withdraw_id,
-          "universal_id": lnurluniversal_id,
+          "flip_id": lnurlflip_id,
           "amount_msat": amount_msat,  # Store amount in msats
           "created_time": int(time.time()),
           "payment_request": pr
@@ -428,27 +428,27 @@ async def api_withdraw_callback(
   try:
       # Check wallet balance to ensure we have enough
       from lnbits.core.crud import get_wallet
-      wallet = await get_wallet(lnurluniversal.wallet)
+      wallet = await get_wallet(lnurlflip.wallet)
       wallet_balance_msat = wallet.balance_msat
       
       logging.info(f"Withdraw attempt: amount={amount_msat} msat, wallet_balance={wallet_balance_msat} msat")
       
       # Check if wallet has enough balance for withdrawal
       if wallet_balance_msat < amount_msat:
-          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, universal_id={lnurluniversal_id}")
+          logger.warning(f"Insufficient wallet balance for withdrawal: wallet={wallet_balance_msat}, amount={amount_msat}, flip_id={lnurlflip_id}")
           return {
               "status": "ERROR", 
               "reason": "Insufficient balance"
           }
       
       payment_hash = await pay_invoice(
-          wallet_id=lnurluniversal.wallet,
+          wallet_id=lnurlflip.wallet,
           payment_request=pr,
           extra={
-              "tag": "ext_lnurluniversal",
+              "tag": "ext_lnurlflip",
               "lnurlwithdraw": True,
-              "universal_id": lnurluniversal_id,
-              "selectedLnurlw": lnurluniversal.selectedLnurlw,
+              "flip_id": lnurlflip_id,
+              "selectedLnurlw": lnurlflip.selectedLnurlw,
               "withdraw_id": withdraw_id
           }
       )
@@ -456,7 +456,7 @@ async def api_withdraw_callback(
 
       await db.execute(
           """
-          UPDATE lnurluniversal.pending_withdrawals
+          UPDATE lnurlFlip.pending_withdrawals
           SET status = 'completed'
           WHERE payment_request = :payment_request
           """,
@@ -464,9 +464,9 @@ async def api_withdraw_callback(
       )
 
       # Use locked payment processing to prevent race conditions
-      increment_uses = amount_msat >= lnurluniversal.total_msat
-      updated_universal = await process_payment_with_lock(
-          lnurluniversal_id,
+      increment_uses = amount_msat >= lnurlflip.total_msat
+      updated_flip = await process_payment_with_lock(
+          lnurlflip_id,
           -amount_msat,  # Negative because we're withdrawing
           increment_uses=increment_uses,
           operation_type="withdrawal"
@@ -476,73 +476,73 @@ async def api_withdraw_callback(
   except Exception as e:
       await db.execute(
           """
-          UPDATE lnurluniversal.pending_withdrawals
+          UPDATE lnurlFlip.pending_withdrawals
           SET status = 'failed'
           WHERE payment_request = :payment_request
           """,
           {"payment_request": pr}
       )
       # Log full error for debugging
-      logger.error(f"Withdrawal failed: {str(e)} universal_id={lnurluniversal_id} amount_msat={amount_msat}")
+      logger.error(f"Withdrawal failed: {str(e)} flip_id={lnurlflip_id} amount_msat={amount_msat}")
       # Return simple LNURL-compliant error response
       return {"status": "ERROR", "reason": "Payment failed"}
 
 
-@lnurluniversal_api_router.put("/api/v1/myex/{lnurluniversal_id}")
-async def api_lnurluniversal_update(
-    data: CreateLnurlUniversalData,
-    lnurluniversal_id: str,
+@lnurlFlip_api_router.put("/api/v1/myex/{lnurlflip_id}")
+async def api_lnurlFlip_update(
+    data: CreateLnurlFlipData,
+    lnurlflip_id: str,
     wallet: WalletTypeInfo = Depends(require_admin_key),
-) -> LnurlUniversal:
-    if not lnurluniversal_id:
+) -> LnurlFlip:
+    if not lnurlflip_id:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
     
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
     # Admin operations require direct wallet ownership
-    if lnurluniversal.wallet != wallet.wallet.id:
+    if lnurlflip.wallet != wallet.wallet.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     # Check for duplicate name if the name is being changed
-    if lnurluniversal.name != data.name:
-        if await check_duplicate_name(data.name, lnurluniversal.wallet, exclude_id=lnurluniversal_id):
+    if lnurlflip.name != data.name:
+        if await check_duplicate_name(data.name, lnurlflip.wallet, exclude_id=lnurlflip_id):
             raise HTTPException(
                 status_code=HTTPStatus.BAD_REQUEST,
-                detail=f"A lnurluniversal with the name '{data.name}' already exists in this wallet"
+                detail=f"A lnurlflip with the name '{data.name}' already exists in this wallet"
             )
 
     # Update only the fields that exist in the new model
-    lnurluniversal.name = data.name
-    lnurluniversal.selectedLnurlp = data.selectedLnurlp
-    lnurluniversal.selectedLnurlw = data.selectedLnurlw
+    lnurlflip.name = data.name
+    lnurlflip.selectedLnurlp = data.selectedLnurlp
+    lnurlflip.selectedLnurlw = data.selectedLnurlw
 
-    return await update_lnurluniversal(lnurluniversal)
+    return await update_lnurlFlip(lnurlflip)
 
 
 ## Create a new record
 
-@lnurluniversal_api_router.post("/api/v1/myex", status_code=HTTPStatus.CREATED)
-async def api_lnurluniversal_create(
+@lnurlFlip_api_router.post("/api/v1/myex", status_code=HTTPStatus.CREATED)
+async def api_lnurlflip_create(
     request: Request,
-    data: CreateLnurlUniversalData,
+    data: CreateLnurlFlipData,
     key_type: WalletTypeInfo = Depends(require_admin_key),
-) -> LnurlUniversal:
+) -> LnurlFlip:
     data.wallet = data.wallet or key_type.wallet.id
     
     # Check for duplicate name
     if await check_duplicate_name(data.name, data.wallet):
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"A lnurluniversal with the name '{data.name}' already exists in this wallet"
+            detail=f"A lnurlflip with the name '{data.name}' already exists in this wallet"
         )
     
-    lnurluniversal_id = urlsafe_short_hash()
-    myext = LnurlUniversal(
-        id=lnurluniversal_id,
+    lnurlflip_id = urlsafe_short_hash()
+    myext = LnurlFlip(
+        id=lnurlflip_id,
         name=data.name,
         wallet=data.wallet,
         selectedLnurlp=data.selectedLnurlp,
@@ -551,29 +551,29 @@ async def api_lnurluniversal_create(
         uses=0    # Initialize uses to 0
     )
 
-    created_lnurluniversal = await create_lnurluniversal(myext)
+    created_lnurlflip = await create_lnurlflip(myext)
     
-    # Fetch the created LnurlUniversal to ensure all fields are populated
-    fetched_lnurluniversal = await get_lnurluniversal(created_lnurluniversal.id)
-    logger.info(f"Created universal {created_lnurluniversal.id} with name: {created_lnurluniversal.name}")
+    # Fetch the created LnurlFlip to ensure all fields are populated
+    fetched_lnurlflip = await get_lnurlFlip(created_lnurlflip.id)
+    logger.info(f"Created flip {created_lnurlflip.id} with name: {created_lnurlflip.name}")
     
-    return fetched_lnurluniversal
+    return fetched_lnurlflip
 
 
 ## Delete a record
-@lnurluniversal_api_router.delete("/api/v1/myex/{lnurluniversal_id}")
-async def api_lnurluniversal_delete(
-    lnurluniversal_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
+@lnurlFlip_api_router.delete("/api/v1/myex/{lnurlflip_id}")
+async def api_lnurlflip_delete(
+    lnurlflip_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
     # Admin operations require direct wallet ownership
-    if lnurluniversal.wallet != wallet.wallet.id:
+    if lnurlflip.wallet != wallet.wallet.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    await delete_lnurluniversal(lnurluniversal_id)
+    await delete_lnurlFlip(lnurlflip_id)
     return "", HTTPStatus.NO_CONTENT
 
 
@@ -582,23 +582,23 @@ async def api_lnurluniversal_delete(
 ## This endpoint creates a payment
 
 
-@lnurluniversal_api_router.post(
-    "/api/v1/myex/payment/{lnurluniversal_id}", status_code=HTTPStatus.CREATED
+@lnurlFlip_api_router.post(
+    "/api/v1/myex/payment/{lnurlflip_id}", status_code=HTTPStatus.CREATED
 )
-async def api_lnurluniversal_create_invoice(
-    lnurluniversal_id: str, 
+async def api_lnurlflip_create_invoice(
+    lnurlflip_id: str, 
     amount: int = Query(..., ge=1),  # Amount in sats
     memo: str = "",
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    lnurluniversal = await get_lnurluniversal(lnurluniversal_id)
-    if not lnurluniversal:
+    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
     # Check if user has access to this universal
-    if lnurluniversal.wallet != wallet.wallet.id:
+    if lnurlflip.wallet != wallet.wallet.id:
         user = await get_user(wallet.wallet.user)
-        if not user or lnurluniversal.wallet not in user.wallet_ids:
+        if not user or lnurlflip.wallet not in user.wallet_ids:
             raise HTTPException(status_code=403, detail="Access denied")
 
     # we create a payment and add some tags,
@@ -606,39 +606,39 @@ async def api_lnurluniversal_create_invoice(
 
     try:
         payment = await create_invoice(
-            wallet_id=lnurluniversal.wallet,
+            wallet_id=lnurlflip.wallet,
             amount=amount,  # Already in sats, no conversion needed
-            memo=f"{memo} to {lnurluniversal.name}" if memo else f"{lnurluniversal.name}",
+            memo=f"{memo} to {lnurlflip.name}" if memo else f"{lnurlflip.name}",
             extra={
-                "tag": "lnurluniversal",
+                "tag": "lnurlflip",
                 "amount": amount,
             },
         )
     except Exception as exc:
-        logger.error(f"Payment creation failed for universal_id: {lnurluniversal_id}, error: {str(exc)}")
+        logger.error(f"Payment creation failed for flip_id: {lnurlflip_id}, error: {str(exc)}")
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Payment creation failed"
         ) from exc
 
     return {"payment_hash": payment.payment_hash, "payment_request": payment.bolt11}
 
-@lnurluniversal_api_router.get("/api/v1/comments/{universal_id}")
+@lnurlFlip_api_router.get("/api/v1/comments/{flip_id}")
 async def api_get_comments(
-    universal_id: str,
+    flip_id: str,
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> list[dict]:
-    """Get comments for a universal"""
-    universal = await get_lnurluniversal(universal_id)
-    if not universal:
+    """Get comments for a flip"""
+    flip = await get_lnurlFlip(flip_id)
+    if not flip:
         raise HTTPException(status_code=404, detail="Not found")
     
-    # Check if user has access to this universal
-    if universal.wallet != wallet.wallet.id:
+    # Check if user has access to this flip
+    if flip.wallet != wallet.wallet.id:
         user = await get_user(wallet.wallet.user)
-        if not user or universal.wallet not in user.wallet_ids:
+        if not user or flip.wallet not in user.wallet_ids:
             raise HTTPException(status_code=403, detail="Access denied")
 
-    comments = await get_universal_comments(universal_id)
+    comments = await get_flip_comments(flip_id)
     return comments
 
 # LNURL-specific routes
