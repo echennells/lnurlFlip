@@ -499,7 +499,7 @@ async def api_lnurlFlip_update(
             status_code=HTTPStatus.NOT_FOUND, detail="Not found"
         )
     
-    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
     if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
@@ -565,7 +565,7 @@ async def api_lnurlflip_create(
 async def api_lnurlflip_delete(
     lnurlflip_id: str, wallet: WalletTypeInfo = Depends(require_admin_key)
 ):
-    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
     if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
@@ -591,7 +591,7 @@ async def api_lnurlflip_create_invoice(
     memo: str = "",
     wallet: WalletTypeInfo = Depends(require_invoice_key)
 ) -> dict:
-    lnurlflip = await get_lnurlflip(lnurlflip_id)
+    lnurlflip = await get_lnurlFlip(lnurlflip_id)
     if not lnurlflip:
         raise HTTPException(status_code=404, detail="Not found")
     
